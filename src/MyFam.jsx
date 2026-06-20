@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   Plus, X, Search, Share2, QrCode, MapPin, Calendar, Mail, Phone,
   Instagram, MessageCircle, Crosshair, ZoomIn, ZoomOut, UserPlus,
-  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe,
+  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid,
 } from "lucide-react";
 import * as THREE from "three";
 import WORLD_BORDERS from "./worldBorders.js";
@@ -53,7 +53,7 @@ const initials = (p) => (p.first[0] || "") + (p.last[0] || "");
 const colorFor = (p) => p.isYou ? T.gold : ["#4FA3C7", "#C79A4F", "#C77FA8", "#6FB85C", "#9B7FD1", "#C77F5C"][p.id % 6];
 
 /* ---------- seed-familie ---------- */
-const seedPersons = [
+const seedPersonsRaw = [
   { id: 1, isYou: true, first: "Yara", last: "Hussein", birth: "1994-03-12", city: "Amsterdam", birthCity: "Caïro", email: "yara@myfam.app", username: "yara", insta: "yara.h", fb: "yara.hussein", gender: "v", cx: 0, cy: 0 },
   { id: 2, first: "Ahmed", last: "Hussein", birth: "1965-07-02", city: "Caïro", birthCity: "Alexandrië", email: "ahmed@mail.com", username: "ahmed", gender: "m", cx: -210, cy: -210 },
   { id: 3, first: "Layla", last: "Mansour", birth: "1968-11-21", city: "Caïro", username: "layla", gender: "v", cx: 210, cy: -210 },
@@ -71,11 +71,74 @@ const seedParent = [
   { p: 7, c: 8 }, { p: 1, c: 10 }, { p: 9, c: 10 },
 ];
 const seedSpouse = [{ a: 2, b: 3 }, { a: 5, b: 6 }, { a: 1, b: 9 }];
+const seedPersons = autoLayout(seedPersonsRaw, seedParent, seedSpouse);
 
 const edgePath = (a, b, curve) => {
   if (curve) { const my = (a.cy + b.cy) / 2; return `M${a.cx},${a.cy} C${a.cx},${my} ${b.cx},${my} ${b.cx},${b.cy}`; }
   return `M${a.cx},${a.cy} L${b.cx},${b.cy}`;
 };
+
+/* ---------- auto-layout: tidy generational stamboom ----------
+   Partners share one row (placed side by side); every child generation
+   cascades onto the row below, positioned under its parents. Returns the
+   same persons with fresh cx/cy. Pure — safe to call any time. */
+function autoLayout(persons, parentOf, spouse) {
+  if (!persons.length) return persons;
+  const ids = persons.map((p) => p.id);
+  const parentsOf = (id) => parentOf.filter((e) => e.c === id).map((e) => e.p);
+  const partnersOf = (id) => spouse.filter((e) => e.a === id || e.b === id).map((e) => (e.a === id ? e.b : e.a));
+
+  // 1) row (generation) per person: longest path from a parentless ancestor,
+  //    with partners forced onto the same row. Iterate to a fixpoint.
+  const gen = new Map(ids.map((id) => [id, 0]));
+  for (let i = 0; i < persons.length + 5; i++) {
+    let changed = false;
+    for (const e of parentOf) { const w = gen.get(e.p) + 1; if (gen.get(e.c) < w) { gen.set(e.c, w); changed = true; } }
+    for (const e of spouse) { const m = Math.max(gen.get(e.a), gen.get(e.b)); if (gen.get(e.a) !== m) { gen.set(e.a, m); changed = true; } if (gen.get(e.b) !== m) { gen.set(e.b, m); changed = true; } }
+    if (!changed) break;
+  }
+
+  const rows = {};
+  ids.forEach((id) => { (rows[gen.get(id)] ||= []).push(id); });
+  const levels = Object.keys(rows).map(Number).sort((a, b) => a - b);
+
+  const ROW_H = 210, PARTNER_GAP = 200, UNIT_GAP = 230;
+  const xOf = new Map();
+  const placed = new Set();
+
+  for (const lvl of levels) {
+    // group this row into units — a couple becomes one side-by-side unit
+    const units = [];
+    for (const id of rows[lvl]) {
+      if (placed.has(id)) continue;
+      const mate = partnersOf(id).find((m) => gen.get(m) === lvl && !placed.has(m));
+      if (mate) { units.push([id, mate]); placed.add(id); placed.add(mate); }
+      else { units.push([id]); placed.add(id); }
+    }
+    // order units under their parents (barycenter); parentless keep input order
+    units.forEach((u, idx) => {
+      const px = u.flatMap(parentsOf).map((p) => xOf.get(p)).filter((v) => v != null);
+      u.bary = px.length ? px.reduce((a, b) => a + b, 0) / px.length : null;
+      u.idx = idx;
+    });
+    units.sort((a, b) => (a.bary != null && b.bary != null && a.bary !== b.bary ? a.bary - b.bary : a.idx - b.idx));
+    // place left→right, pulling each unit under its parents but never overlapping
+    let prevRight = null;
+    for (const u of units) {
+      const half = u.length === 2 ? PARTNER_GAP / 2 : 0;
+      let c = u.bary != null ? u.bary : prevRight == null ? 0 : prevRight + UNIT_GAP + half;
+      if (prevRight != null) c = Math.max(c, prevRight + UNIT_GAP + half);
+      if (u.length === 2) { xOf.set(u[0], c - half); xOf.set(u[1], c + half); }
+      else xOf.set(u[0], c);
+      prevRight = c + half;
+    }
+  }
+
+  // 3) anchor "you" at the origin
+  const youId = persons.find((p) => p.isYou)?.id ?? ids[0];
+  const dx = xOf.get(youId) || 0; const youGen = gen.get(youId);
+  return persons.map((p) => ({ ...p, cx: Math.round((xOf.get(p.id) ?? 0) - dx), cy: (gen.get(p.id) - youGen) * ROW_H }));
+}
 
 export default function MyFam() {
   const [boot] = useState(loadState); // saved tree from localStorage, or null
@@ -86,6 +149,8 @@ export default function MyFam() {
   const [meId, setMeId] = useState(() => boot?.meId ?? 1); // "you" — backend overrides this when logged in
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [selectedId, setSelectedId] = useState(() => boot?.meId ?? 1);
+  const [selectedIds, setSelectedIds] = useState(() => new Set()); // multi-select (marquee / shift-click)
+  const [marquee, setMarquee] = useState(null); // rubber-band rect in container space {x,y,w,h}
   const [panel, setPanel] = useState(null);       // 'add' | 'addFree' | 'connect' | 'share'
   const [toast, setToast] = useState(null);
   const [highlight, setHighlight] = useState(new Set());
@@ -102,6 +167,7 @@ export default function MyFam() {
   const containerRef = useRef(null);
   const panDrag = useRef({ active: false });
   const nodeDrag = useRef({ active: false });
+  const marqueeRef = useRef({ active: false });
   const pointers = useRef(new Map()); // active pointers on the 2D canvas (for pinch-zoom)
   const pinch = useRef(null);         // { dist, mid } while two fingers are down
   const viewRef = useRef(view); useEffect(() => { viewRef.current = view; }, [view]);
@@ -167,7 +233,27 @@ export default function MyFam() {
     const px = sx ?? r.width / 2, py = sy ?? r.height / 2;
     setView((v) => { const nk = Math.min(2.4, Math.max(0.3, v.k * factor)); const wx = (px - v.x) / v.k, wy = (py - v.y) / v.k; return { k: nk, x: px - wx * nk, y: py - wy * nk }; });
   };
-  const onWheel = (e) => { if (mode !== "2d") return; e.preventDefault(); const r = containerRef.current.getBoundingClientRect(); const d = Math.max(-50, Math.min(50, e.deltaY)); zoomBy(Math.exp(-d * 0.0016), e.clientX - r.left, e.clientY - r.top); };
+  // Modern trackpad/mouse gestures: pinch (or ⌘/Ctrl+wheel) zooms at the cursor;
+  // a plain two-finger scroll pans the canvas (deltaX/deltaY) instead of zooming.
+  const onWheel = (e) => {
+    if (mode !== "2d") return;
+    e.preventDefault();
+    const r = containerRef.current.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) { // pinch-zoom gesture arrives as a ctrl-wheel
+      const d = Math.max(-50, Math.min(50, e.deltaY));
+      zoomBy(Math.exp(-d * 0.01), e.clientX - r.left, e.clientY - r.top);
+    } else {
+      setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+    }
+  };
+
+  /* re-run the tidy generational layout on the current family */
+  const arrange = () => {
+    const laid = autoLayout(personsRef.current, parentOf, spouse);
+    setPersons(laid);
+    if (backendEnabled() && user) for (const p of laid) api.patchPerson(p.id, { cx: p.cx, cy: p.cy }).catch(() => {});
+    centerOn(0, 0, viewRef.current.k);
+  };
 
   /* ---------- relatie-helpers ---------- */
   /* relationship engine — pure logic lives in ./relationships.js; these thin wrappers
@@ -231,8 +317,12 @@ export default function MyFam() {
   /* ---------- pointer: pan + node-drag + klik-op-veld ---------- */
   const startNodeDrag = (id, e) => {
     e.stopPropagation();
-    const p = personsRef.current.find((x) => x.id === id); const w = screenToWorld(e.clientX, e.clientY);
-    nodeDrag.current = { active: true, id, offX: w.x - p.cx, offY: w.y - p.cy, sx: e.clientX, sy: e.clientY, moved: false };
+    const ps = personsRef.current; const w = screenToWorld(e.clientX, e.clientY);
+    // if grabbing a node that's part of a multi-selection, drag the whole group
+    const group = selectedIds.has(id) && selectedIds.size > 1 ? [...selectedIds] : [id];
+    const offs = {};
+    for (const gid of group) { const p = ps.find((x) => x.id === gid); if (p) offs[gid] = { ox: w.x - p.cx, oy: w.y - p.cy }; }
+    nodeDrag.current = { active: true, id, group, offs, shift: e.shiftKey, sx: e.clientX, sy: e.clientY, moved: false };
   };
   const computePreview = (id, nx, ny) => {
     const ps = personsRef.current; let best = null;
@@ -247,10 +337,15 @@ export default function MyFam() {
     if (pointers.current.size === 2) { // second finger → begin pinch; cancel pan/node-drag
       const [a, b] = [...pointers.current.values()]; const r = containerRef.current.getBoundingClientRect();
       pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top } };
-      panDrag.current = { active: false }; nodeDrag.current = { active: false }; setDragPreview(null);
+      panDrag.current = { active: false }; nodeDrag.current = { active: false }; marqueeRef.current = { active: false }; setMarquee(null); setDragPreview(null);
       return;
     }
-    panDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: viewRef.current.x, oy: viewRef.current.y, moved: false };
+    // mouse on empty canvas → rubber-band select; touch one-finger → pan
+    if (e.pointerType === "mouse" && !e.shiftKey) {
+      marqueeRef.current = { active: true, sx: e.clientX, sy: e.clientY, moved: false };
+    } else {
+      panDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: viewRef.current.x, oy: viewRef.current.y, moved: false };
+    }
   };
   const onPointerMove = (e) => {
     if (pinch.current) {
@@ -265,10 +360,15 @@ export default function MyFam() {
       return;
     }
     if (nodeDrag.current.active) {
-      const nd = nodeDrag.current; const w = screenToWorld(e.clientX, e.clientY); const nx = w.x - nd.offX, ny = w.y - nd.offY;
+      const nd = nodeDrag.current; const w = screenToWorld(e.clientX, e.clientY);
       if (Math.hypot(e.clientX - nd.sx, e.clientY - nd.sy) > 4) nd.moved = true;
-      setPersons((ps) => ps.map((p) => p.id === nd.id ? { ...p, cx: nx, cy: ny } : p));
-      computePreview(nd.id, nx, ny);
+      setPersons((ps) => ps.map((p) => nd.offs[p.id] ? { ...p, cx: w.x - nd.offs[p.id].ox, cy: w.y - nd.offs[p.id].oy } : p));
+      if (nd.group.length === 1) { const o = nd.offs[nd.id]; computePreview(nd.id, w.x - o.ox, w.y - o.oy); } // connect-preview only for single drags
+    } else if (marqueeRef.current.active) {
+      const m = marqueeRef.current; const r = containerRef.current.getBoundingClientRect();
+      if (Math.hypot(e.clientX - m.sx, e.clientY - m.sy) > 4) m.moved = true;
+      const x0 = m.sx - r.left, y0 = m.sy - r.top, x1 = e.clientX - r.left, y1 = e.clientY - r.top;
+      setMarquee({ x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) });
     } else if (panDrag.current.active) {
       const pd = panDrag.current; if (Math.hypot(e.clientX - pd.sx, e.clientY - pd.sy) > 4) pd.moved = true;
       setView((v) => ({ ...v, x: pd.ox + (e.clientX - pd.sx), y: pd.oy + (e.clientY - pd.sy) }));
@@ -289,16 +389,32 @@ export default function MyFam() {
         else if (relation === "kind") setParentOf((es) => [...es, { p: toId, c: fromId }]);
         else setSpouse((es) => [...es, { a: fromId, b: toId }]);
         setToast({ type: "connected", from, to, relation });
-      } else if (nd.moved) { // repositioned only — persist the new coords in backend mode
-        if (backendEnabled() && user) { const p = personsRef.current.find((x) => x.id === nd.id); if (p) api.patchPerson(nd.id, { cx: p.cx, cy: p.cy }).catch(() => {}); }
-      } else { setSelectedId(nd.id); setHighlight(new Set()); }
+      } else if (nd.moved) { // repositioned only — persist the new coords (whole group) in backend mode
+        if (backendEnabled() && user) { for (const gid of nd.group) { const p = personsRef.current.find((x) => x.id === gid); if (p) api.patchPerson(gid, { cx: p.cx, cy: p.cy }).catch(() => {}); } }
+      } else if (nd.shift) { // shift-click toggles the node in the multi-selection
+        setSelectedIds((s) => { const n = new Set(s); n.has(nd.id) ? n.delete(nd.id) : n.add(nd.id); setSelectedId(n.size === 1 ? [...n][0] : null); return n; });
+        setHighlight(new Set());
+      } else { setSelectedId(nd.id); setSelectedIds(new Set([nd.id])); setHighlight(new Set()); }
       nodeDrag.current = { active: false }; setDragPreview(null); return;
+    }
+    if (marqueeRef.current.active) {
+      const m = marqueeRef.current; marqueeRef.current = { active: false };
+      if (m.moved && marquee) { // commit rubber-band → select every node whose centre is inside
+        const v = viewRef.current; const sel = new Set();
+        for (const p of personsRef.current) { const sx = v.x + p.cx * v.k, sy = v.y + p.cy * v.k; if (sx >= marquee.x && sx <= marquee.x + marquee.w && sy >= marquee.y && sy <= marquee.y + marquee.h) sel.add(p.id); }
+        setSelectedIds(sel); setSelectedId(sel.size === 1 ? [...sel][0] : null); setHighlight(new Set());
+      } else { // a plain click on empty canvas
+        if (panel) setPanel(null);
+        else if (selectedId || selectedIds.size) { setSelectedId(null); setSelectedIds(new Set()); setHighlight(new Set()); }
+        else { const w = screenToWorld(e.clientX, e.clientY); setAddAt(w); setPanel("addFree"); }
+      }
+      setMarquee(null); return;
     }
     if (panDrag.current.active) {
       const pd = panDrag.current; nodeDrag.current = { active: false };
       if (!pd.moved) {
         if (panel) setPanel(null);
-        else if (selectedId) { setSelectedId(null); setHighlight(new Set()); }
+        else if (selectedId || selectedIds.size) { setSelectedId(null); setSelectedIds(new Set()); setHighlight(new Set()); }
         else { const w = screenToWorld(e.clientX, e.clientY); setAddAt(w); setPanel("addFree"); }
       }
       panDrag.current = { active: false };
@@ -370,6 +486,7 @@ export default function MyFam() {
             <IconBtn onClick={() => zoomBy(1.2)}><ZoomIn size={17} /></IconBtn>
           </div>
           <IconBtn onClick={() => { setHighlight(new Set()); setSelectedId(meId); centerOn(me?.cx ?? 0, me?.cy ?? 0, 1); }} title={t("centerMe")}><Crosshair size={17} /></IconBtn>
+          <IconBtn onClick={arrange} title={t("arrange")}><LayoutGrid size={17} /></IconBtn>
         </>}
         <button onClick={() => setPanel("connect")} style={pill(T.green, "#06140F")}><QrCode size={16} /> {t("connect")}</button>
         <button onClick={() => setPanel("share")} style={pill(T.surfaceUp, T.text)}><Share2 size={16} /> {t("share")}</button>
@@ -411,7 +528,7 @@ export default function MyFam() {
 
           {persons.map((p, i) => (
             <Node key={p.id} p={p} index={i} revealed={revealed} title={titles[p.id]}
-              selected={p.id === selectedId} hot={highlight.has(p.id)}
+              selected={p.id === selectedId || selectedIds.has(p.id)} hot={highlight.has(p.id)}
               dragging={nodeDrag.current.active && nodeDrag.current.id === p.id}
               onDragStart={startNodeDrag} />
           ))}
@@ -422,6 +539,10 @@ export default function MyFam() {
             </div>
           )}
         </div>
+
+        {marquee && marquee.w > 2 && marquee.h > 2 && (
+          <div style={{ position: "absolute", left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, border: `1px solid ${T.green}`, background: "rgba(63,185,133,0.12)", borderRadius: 4, pointerEvents: "none", zIndex: 20 }} />
+        )}
 
         {/* hint */}
         {revealed && !panel && !selected && (
