@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize, lev, nameMatch, parentsOf, ancestors, hasEdge, bfsPath, relationship } from "./relationships.js";
+import { normalize, lev, nameMatch, parentsOf, ancestors, hasEdge, bfsPath, relationship, kinshipTitle } from "./relationships.js";
 
 // Stub translator: returns the key (with {n} appended) so tests assert the chosen
 // classification rather than locale wording.
@@ -111,5 +111,35 @@ describe("relationship", () => {
   });
   it("reports no blood relation for disconnected people", () => {
     expect(rel(B, 21, 999)).toEqual({ label: "rel_none", via: null });
+  });
+});
+
+describe("kinshipTitle (rich, gendered)", () => {
+  // D: linear ancestry 1->2->3->4->5->6
+  const D = { parentOf: [{ p: 1, c: 2 }, { p: 2, c: 3 }, { p: 3, c: 4 }, { p: 4, c: 5 }, { p: 5, c: 6 }], spouse: [], sibling: [] };
+  // E: 1->2, 1->3, then 3->4->5->6 (a long nephew/cousin line off sibling 2)
+  const E = { parentOf: [{ p: 1, c: 2 }, { p: 1, c: 3 }, { p: 3, c: 4 }, { p: 4, c: 5 }, { p: 5, c: 6 }], spouse: [], sibling: [] };
+  const kt = (g, from, to, gender, lang) => kinshipTitle(g.parentOf, g.spouse, g.sibling, from, to, gender, lang, t);
+
+  it("Dutch ancestors/descendants use over-/betover-/achter- prefixes", () => {
+    expect(kt(D, 5, 1, "m", "nl")).toBe("betovergrootouder");        // depth-4 ancestor
+    expect(kt(D, 1, 5, undefined, "nl")).toBe("achterachterkleinkind"); // depth-4 descendant
+  });
+  it("English uses grand-/great- prefixes (gendered close terms)", () => {
+    expect(kt(D, 4, 2, "m", "en")).toBe("grandfather");              // depth-2 ancestor, male
+    expect(kt(D, 5, 1, "m", "en")).toBe("great-great-grandparent");  // depth-4 ancestor
+    expect(kt(D, 1, 5, "v", "en")).toBe("great-great-grandchild");
+  });
+  it("Dutch collateral line: neef … achterachterneef", () => {
+    expect(kt(E, 2, 4, "m", "nl")).toBe("neef");              // nephew (depth 2)
+    expect(kt(E, 2, 6, "m", "nl")).toBe("achterachterneef");  // great-great-nephew (depth 4)
+  });
+  it("cousins are degree-based", () => {
+    expect(kt(C, 121, 122, "m", "nl")).toBe("achterneef"); // second cousins
+    expect(kt(C, 121, 122, "m", "en")).toBe("2nd cousin");
+  });
+  it("self and unrelated", () => {
+    expect(kt(D, 1, 1, "m", "nl")).toBe("jij");
+    expect(kt(D, 1, 999, "m", "nl")).toBe(null);
   });
 });

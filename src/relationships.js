@@ -55,3 +55,83 @@ export const relationship = (parentOf, spouse, sibling, idA, idB, t) => {
   }
   return { label: t("rel_none"), via: null };
 };
+
+/* ---------- kinship titles (richer, gendered terms relative to one person) ---------- */
+// Classify how `toId` relates to `fromId` via their lowest common ancestor.
+export function kinship(parentOf, spouse, sibling, fromId, toId) {
+  if (fromId === toId) return { kind: "same" };
+  if (spouse.some((e) => (e.a === fromId && e.b === toId) || (e.a === toId && e.b === fromId))) return { kind: "partner" };
+  const aA = ancestors(parentOf, fromId); aA.set(fromId, 0);
+  const aB = ancestors(parentOf, toId); aB.set(toId, 0);
+  let best = null;
+  aA.forEach((da, anc) => { if (aB.has(anc)) { const s = da + aB.get(anc); if (!best || s < best.s) best = { anc, da, db: aB.get(anc), s }; } });
+  if (sibling.some((e) => (e.a === fromId && e.b === toId) || (e.a === toId && e.b === fromId)))
+    return { kind: "sibling", via: best ? best.anc : null };
+  if (!best) return { kind: "none" };
+  const { anc, da, db } = best;
+  if (da === 0) return { kind: "descendant", depth: db, via: anc };
+  if (db === 0) return { kind: "ancestor", depth: da, via: anc };
+  if (da === 1 && db === 1) return { kind: "sibling", via: anc };
+  if (Math.min(da, db) === 1) return da === 1 ? { kind: "nibling", depth: db, via: anc } : { kind: "pibling", depth: da, via: anc };
+  return { kind: "cousin", degree: Math.min(da, db), removed: Math.abs(da - db), via: anc };
+}
+
+const repeat = (s, n) => (n > 0 ? s.repeat(n) : "");
+
+// Dutch: uses the over-/betover- (ancestors) and achter-/oud- (descendants, collaterals) prefixes.
+function nlTitle(k, g) {
+  const pick = (m, f, n) => (g === "m" ? m : g === "v" ? f : n);
+  switch (k.kind) {
+    case "same": return "jij";
+    case "partner": return "partner";
+    case "sibling": return pick("broer", "zus", "broer/zus");
+    case "ancestor": { const d = k.depth;
+      if (d === 1) return pick("vader", "moeder", "ouder");
+      if (d === 2) return pick("opa", "oma", "grootouder");
+      if (d === 3) return "overgrootouder";
+      if (d === 4) return "betovergrootouder";
+      return `voorouder (${d}e generatie)`; }
+    case "descendant": { const d = k.depth;
+      if (d === 1) return pick("zoon", "dochter", "kind");
+      if (d === 2) return pick("kleinzoon", "kleindochter", "kleinkind");
+      return repeat("achter", d - 2) + "kleinkind"; }       // 3=achterkleinkind, 4=achterachterkleinkind
+    case "pibling": return repeat("oud", k.depth - 2) + pick("oom", "tante", "oom/tante"); // 2=oom, 3=oudoom
+    case "nibling": return repeat("achter", k.depth - 2) + pick("neef", "nicht", "neef/nicht"); // 2=neef, 3=achterneef
+    case "cousin": { const base = repeat("achter", k.degree - 2) + pick("neef", "nicht", "neef/nicht"); // 2=neef, 3=achterneef, 4=achterachterneef
+      return k.removed > 0 ? `${base} (${k.removed}× verwijderd)` : base; }
+    default: return null;
+  }
+}
+
+const ordEn = (n) => ["", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"][n] || `${n}th`;
+function enTitle(k, g) {
+  const pick = (m, f, n) => (g === "m" ? m : g === "v" ? f : n);
+  switch (k.kind) {
+    case "same": return "you";
+    case "partner": return "partner";
+    case "sibling": return pick("brother", "sister", "sibling");
+    case "ancestor": { const d = k.depth;
+      if (d === 1) return pick("father", "mother", "parent");
+      if (d === 2) return pick("grandfather", "grandmother", "grandparent");
+      return repeat("great-", d - 2) + "grandparent"; }
+    case "descendant": { const d = k.depth;
+      if (d === 1) return pick("son", "daughter", "child");
+      if (d === 2) return pick("grandson", "granddaughter", "grandchild");
+      return repeat("great-", d - 2) + "grandchild"; }
+    case "pibling": return repeat("great-", k.depth - 2) + pick("uncle", "aunt", "uncle/aunt");
+    case "nibling": return repeat("great-", k.depth - 2) + pick("nephew", "niece", "nephew/niece");
+    case "cousin": { const c = `${ordEn(k.degree - 1)} cousin`;
+      return k.removed > 0 ? `${c} ${k.removed}× removed` : c; }
+    default: return null;
+  }
+}
+
+// Localized kinship title of `toId` relative to `fromId`. Rich for nl/en; other
+// languages fall back to the basic relationship() label.
+export function kinshipTitle(parentOf, spouse, sibling, fromId, toId, gender, lang, t) {
+  const k = kinship(parentOf, spouse, sibling, fromId, toId);
+  if (k.kind === "none") return null;
+  if (lang === "nl") return nlTitle(k, gender);
+  if (lang === "en") return enTitle(k, gender);
+  return relationship(parentOf, spouse, sibling, fromId, toId, t).label;
+}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Plus, X, Search, Share2, QrCode, MapPin, Calendar, Mail, Phone,
   Instagram, MessageCircle, Crosshair, ZoomIn, ZoomOut, UserPlus,
@@ -97,7 +97,7 @@ export default function MyFam() {
   const [mode, setMode] = useState("2d");
   const [lang, setLangState] = useState(getLang());
   const [access, setAccess] = useState(null);   // backend access info: { role, paid, locked, total, visible }
-  const { user, logout } = useAuth();            // null in local-demo mode
+  const { user, logout, openAuth } = useAuth(); // user is null in local-demo mode
 
   const containerRef = useRef(null);
   const panDrag = useRef({ active: false });
@@ -315,6 +315,13 @@ export default function MyFam() {
     setToast({ type: "rel", person: found, rel, path, viaName: rel.via ? fullName(byId(rel.via)) : null });
   };
 
+  /* kinship title (achterneef, betovergrootouder, …) of everyone relative to "you" */
+  const titles = useMemo(() => {
+    const map = {};
+    for (const p of persons) { if (p.id === meId || p.connector) continue; map[p.id] = rel.kinshipTitle(parentOf, spouse, sibling, meId, p.id, p.gender, getLang(), t); }
+    return map;
+  }, [persons, parentOf, spouse, sibling, meId, lang]);
+
   /* ---------- render-data ---------- */
   const lines = [];
   parentOf.forEach((e, i) => { const a = byId(e.p), b = byId(e.c); if (a && b) lines.push({ key: `p${i}`, d: edgePath(a, b, true), hot: highlight.has(e.p) && highlight.has(e.c) }); });
@@ -366,6 +373,7 @@ export default function MyFam() {
         </>}
         <button onClick={() => setPanel("connect")} style={pill(T.green, "#06140F")}><QrCode size={16} /> {t("connect")}</button>
         <button onClick={() => setPanel("share")} style={pill(T.surfaceUp, T.text)}><Share2 size={16} /> {t("share")}</button>
+        {!user && <button onClick={openAuth} style={pill(T.green, "#06140F")}><UserPlus size={16} /> Log in</button>}
         {user && <>
           {access && !access.paid && access.locked > 0 && (
             <button onClick={startUnlock} title={`${access.locked} more relatives are locked`} style={pill(T.gold, "#06140F")}>🔒 Unlock full tree · €0,99</button>
@@ -401,7 +409,7 @@ export default function MyFam() {
           </svg>
 
           {persons.map((p, i) => (
-            <Node key={p.id} p={p} index={i} revealed={revealed}
+            <Node key={p.id} p={p} index={i} revealed={revealed} title={titles[p.id]}
               selected={p.id === selectedId} hot={highlight.has(p.id)}
               dragging={nodeDrag.current.active && nodeDrag.current.id === p.id}
               onDragStart={startNodeDrag} />
@@ -428,7 +436,7 @@ export default function MyFam() {
         {mode === "map" && <ErrorBoundary fallback={viewFallback}><GlobeView persons={persons} parentOf={parentOf} spouse={spouse} sibling={sibling} youId={meId} onSelect={(id) => { setSelectedId(id); setHighlight(new Set()); }} /></ErrorBoundary>}
 
         {/* detail + modals */}
-        {selected && !panel && <DetailCard p={selected} isMe={selected.id === meId} onAdd={() => setPanel("add")} onVerify={(id) => setVerifyFor(id)} onClose={() => setSelectedId(null)} />}
+        {selected && !panel && <DetailCard p={selected} isMe={selected.id === meId} title={titles[selected.id]} onAdd={() => setPanel("add")} onVerify={(id) => setVerifyFor(id)} onClose={() => setSelectedId(null)} />}
         {panel === "add" && selected && <AddPanel anchor={selected} persons={persons} onClose={() => setPanel(null)} onSubmit={addMember} />}
         {panel === "addFree" && <FreeAddPanel onClose={() => { setPanel(null); setAddAt(null); }} onSubmit={addFree} />}
         {panel === "connect" && <ConnectPanel onClose={() => setPanel(null)} onConnect={connectTo} />}
@@ -761,7 +769,7 @@ function IconBtn({ children, ...rest }) {
 }
 const pill = (bg, color) => ({ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 15px", background: bg, color, border: "none", borderRadius: 999, fontSize: 13.5, fontWeight: 600, cursor: "pointer", fontFamily: sans });
 
-function Node({ p, index, revealed, selected, hot, dragging, onDragStart }) {
+function Node({ p, index, revealed, selected, hot, dragging, onDragStart, title }) {
   const age = ageFrom(p.birth);
   const popStyle = !revealed ? { animation: `vw-pop .55s cubic-bezier(.2,.8,.2,1) both ${(0.5 + index * 0.05).toFixed(2)}s` } : undefined;
   const common = { position: "absolute", left: p.cx, top: p.cy, transform: "translate(-50%,-50%)", cursor: "grab", zIndex: dragging ? 30 : selected ? 6 : 5, touchAction: "none" };
@@ -779,6 +787,7 @@ function Node({ p, index, revealed, selected, hot, dragging, onDragStart }) {
       <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, background: p.connector ? T.textSoft : colorFor(p), color: "#0A1512", display: "grid", placeItems: "center", fontFamily: serif, fontWeight: 600, fontSize: 15 }}>{p.connector ? "?" : initials(p)}</div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontFamily: serif, fontWeight: 600, fontSize: 14, color: T.text, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontStyle: p.connector ? "italic" : "normal" }}>{p.connector ? p.first : fullName(p)}</div>
+        {title && !p.connector && <div style={{ fontSize: 10, color: T.gold, fontFamily: mono, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}>{title}</div>}
         <div style={{ fontSize: 11, color: T.textSoft, fontFamily: mono }}>{p.connector ? t("connectorTodo") : `${age != null ? t("ageShort", { n: age }) : "—"} · ${p.city}`}</div>
       </div>
     </div>
@@ -792,7 +801,7 @@ function Field({ icon, value, href }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: T.text }}>{inner}</div>;
 }
 
-function DetailCard({ p, isMe, onAdd, onClose, onVerify }) {
+function DetailCard({ p, isMe, title, onAdd, onClose, onVerify }) {
   const age = ageFrom(p.birth);
   return (
     <div onPointerDown={(e) => e.stopPropagation()} style={{ position: "absolute", left: 16, bottom: 16, width: 290, background: T.surface, borderRadius: 18, padding: 18, border: `1px solid ${T.border}`, boxShadow: "0 18px 50px rgba(0,0,0,0.55)", zIndex: 20 }}>
@@ -802,6 +811,7 @@ function DetailCard({ p, isMe, onAdd, onClose, onVerify }) {
         <div>
           <div style={{ fontFamily: serif, fontWeight: 600, fontSize: 18, color: T.text, display: "flex", alignItems: "center", gap: 6 }}>{fullName(p)}{p.fbVerified && <span title={t("fbVerifiedTitle")} style={{ display: "inline-grid", placeItems: "center", width: 17, height: 17, borderRadius: "50%", background: "#1877F2", color: "#fff" }}><Check size={11} strokeWidth={3} /></span>}</div>
           {isMe && <span style={{ fontSize: 11, color: T.gold, fontWeight: 600, fontFamily: mono }}>{t("youAre")}</span>}
+          {!isMe && title && <span style={{ fontSize: 12.5, color: T.gold, fontWeight: 600, fontFamily: mono, textTransform: "capitalize" }}>{title}</span>}
         </div>
       </div>
       <div style={{ height: 1, background: T.border, margin: "14px 0" }} />
