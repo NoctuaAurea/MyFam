@@ -1,0 +1,26 @@
+name = "myfam-api"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# --- D1 database binding ---
+# Create it once with:  wrangler d1 create myfam
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "myfam"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# --- Non-secret config (safe to commit) ---
+# FRONTEND_URL: where the SPA is hosted (used for the post-payment redirect + CORS).
+# PUBLIC_API_URL: this Worker's own public URL (used to build the Mollie webhook URL).
+# ADMIN_EMAIL: the bootstrap admin account; created on first run from ADMIN_PASSWORD.
+[vars]
+FRONTEND_URL = "http://localhost:5173"
+PUBLIC_API_URL = "https://myfam-api.YOUR-SUBDOMAIN.workers.dev"
+ADMIN_EMAIL = "info@n-aurea.com"
+UNLOCK_PRICE = "0.99"
+FREE_RADIUS = "1"
+
+# --- Secrets (NEVER put these here). Set them with wrangler:
+#   wrangler secret put MOLLIE_API_KEY     # your *rotated* Mollie live_/test_ key
+#   wrangler secret put ADMIN_PASSWORD     # initial admin password (change after first login)

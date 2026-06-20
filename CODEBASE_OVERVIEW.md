@@ -326,4 +326,24 @@ There's a fork in the road, and the right first steps are the same on both paths
 - [x] Add two-finger pinch-to-zoom on the 2D canvas (verified: spread 100%→240%, pinch-in 240%→77%).
 
 **All the quick-wins above are done.** Larger follow-ups remain in §11 — notably TypeScript (P2 #10), the `@react-three/fiber` migration (P2 #12), code-splitting the ~840 kB bundle, and the P3 productization track (backend, auth, privacy/GDPR) if MyFam moves past prototype.
+
+---
+
+## 14. Backend — accounts, roles & paid unlock (opt-in)
+
+A real backend lives in **[`server/`](server/)** (Cloudflare Worker + D1). It is **optional**: the SPA only uses it when `VITE_API_BASE` is set — otherwise the app runs exactly as the local demo (no login, no payments).
+
+**Stack:** Cloudflare Worker (`server/src/index.js`), D1/SQLite (`server/schema.sql`), Mollie for the €0,99 payment. Deploy with `wrangler` — see [`server/README.md`](server/README.md).
+
+**Auth & roles (server-enforced):**
+- PBKDF2-SHA256 passwords, opaque bearer-token sessions in D1.
+- `admin` (bootstrapped from `ADMIN_EMAIL`/`ADMIN_PASSWORD` env) → full tree + user management.
+- `paid` user → full tree. `paid` flips **only** via a re-verified Mollie webhook — never from the client.
+- `free` user → only their own node + relatives within `FREE_RADIUS` hops (default 1). Visibility is filtered **on the server** (`/api/tree`), so locked relatives are never sent to the browser.
+
+**Frontend pieces:** [`src/api.js`](src/api.js) (client), [`src/auth.jsx`](src/auth.jsx) (auth context + login/register screen + gate), and a guarded backend path in [`src/MyFam.jsx`](src/MyFam.jsx) (loads the filtered tree, routes edits through the API, "🔒 Unlock full tree · €0,99" button, account chip, admin panel).
+
+**Secrets:** the Mollie key is set via `wrangler secret put MOLLIE_API_KEY` and is **never** in the repo or the client bundle.
+
+**Status:** the frontend (local + backend-aware paths) builds and is verified; the Worker is authored and syntax-checked but **must be deployed + tested by you** (the live Mollie flow can't run in this environment). Remaining polish: positions persist only on drag-end in backend mode; new-node selection after an add isn't re-mapped to the server id; consider httpOnly-cookie sessions and rate-limiting before heavy production use.
 ```

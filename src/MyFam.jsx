@@ -10,6 +10,8 @@ import { t, setLang, getLang, isRTL, LANGS } from "./i18n.js";
 import { loadState, saveState } from "./storage.js";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 import * as rel from "./relationships.js";
+import { useAuth } from "./auth.jsx";
+import { api, backendEnabled } from "./api.js";
 
 /* ============================================================ *
  *  MyFam — donkere, dynamische stamboom
@@ -81,7 +83,7 @@ export default function MyFam() {
   const [parentOf, setParentOf] = useState(() => boot?.parentOf ?? seedParent);
   const [spouse, setSpouse] = useState(() => boot?.spouse ?? seedSpouse);
   const [sibling, setSibling] = useState(() => boot?.sibling ?? []);
-  const [meId] = useState(() => boot?.meId ?? 1); // "you" — no longer hardcoded to id 1
+  const [meId, setMeId] = useState(() => boot?.meId ?? 1); // "you" — backend overrides this when logged in
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [selectedId, setSelectedId] = useState(() => boot?.meId ?? 1);
   const [panel, setPanel] = useState(null);       // 'add' | 'addFree' | 'connect' | 'share'
@@ -94,6 +96,8 @@ export default function MyFam() {
   const [revealed, setRevealed] = useState(false);
   const [mode, setMode] = useState("2d");
   const [lang, setLangState] = useState(getLang());
+  const [access, setAccess] = useState(null);   // backend access info: { role, paid, locked, total, visible }
+  const { user, logout } = useAuth();            // null in local-demo mode
 
   const containerRef = useRef(null);
   const panDrag = useRef({ active: false });
@@ -107,8 +111,34 @@ export default function MyFam() {
   const me = byId(meId) || persons[0];
   const selected = byId(selectedId);
 
-  /* persist the tree (debounced inside storage.js) */
-  useEffect(() => { saveState({ persons, parentOf, spouse, sibling, meId }); }, [persons, parentOf, spouse, sibling, meId]);
+  /* persist to localStorage — local-demo mode only (the backend is the source of truth when logged in) */
+  useEffect(() => { if (backendEnabled() && user) return; saveState({ persons, parentOf, spouse, sibling, meId }); }, [persons, parentOf, spouse, sibling, meId, user]);
+
+  /* backend mode: load the access-filtered tree from the server */
+  const applyTree = useCallback((tr) => {
+    if (!tr) return;
+    setPersons(tr.persons || []); setParentOf(tr.parentOf || []); setSpouse(tr.spouse || []); setSibling(tr.sibling || []);
+    if (tr.meId != null) setMeId(tr.meId); setAccess(tr.access || null);
+  }, []);
+  useEffect(() => {
+    if (!backendEnabled() || !user) return;
+    api.tree().then(applyTree).catch(() => {});
+    if (typeof location !== "undefined" && /[?&]paid=1/.test(location.search)) { // returned from Mollie → poll (webhook may lag a moment)
+      let n = 0; const iv = setInterval(() => { api.tree().then(applyTree).catch(() => {}); if (++n >= 4) clearInterval(iv); }, 1500);
+      return () => clearInterval(iv);
+    }
+  }, [user, applyTree]);
+
+  /* send a client-built add (newPersons + edges) to the server, then apply the returned filtered tree */
+  const pushMutation = async (np, pe, se, sb) => {
+    const ids = new Set(np.map((p) => p.id)); const ref = (id) => (ids.has(id) ? `t${id}` : id);
+    const tree = await api.mutate({
+      newPersons: np.map((p) => ({ tmp: `t${p.id}`, first: p.first, last: p.last, birth: p.birth, city: p.city, birthCity: p.birthCity, email: p.email, insta: p.insta, fb: p.fb, gender: p.gender, cx: p.cx, cy: p.cy })),
+      parent: pe.map((e) => ({ p: ref(e.p), c: ref(e.c) })), spouse: se.map((e) => ({ a: ref(e.a), b: ref(e.b) })), sibling: sb.map((e) => ({ a: ref(e.a), b: ref(e.b) })),
+    });
+    applyTree(tree);
+  };
+  const startUnlock = () => { api.payCreate().then((r) => { if (r.checkoutUrl) window.location.href = r.checkoutUrl; }).catch(() => setToast({ type: "notfound", q: "payment unavailable" })); };
 
   /* fonts + intro-timing */
   useEffect(() => {
@@ -169,6 +199,13 @@ export default function MyFam() {
     else if (kind === "oom/tante") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn(t("kind_ouder"), "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); gps.forEach((g) => pe.push({ p: g, c: target.id })); sb.push({ a: p0, b: target.id }); }
     else if (kind === "neef/nicht") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn(t("kind_ouder"), "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); let uncle = gps.length ? parentOf.filter((e) => gps.includes(e.p) && e.c !== p0).map((e) => e.c)[0] : null; if (!uncle) { const uc = mkConn(t("kind_oom/tante"), "oom/tante"); gps.forEach((g) => pe.push({ p: g, c: uc.id })); if (!gps.length) sb.push({ a: p0, b: uc.id }); uncle = uc.id; } pe.push({ p: uncle, c: target.id }); }
     else if (kind === "kleinkind") { let c0 = childrenOf(anchor.id)[0]; if (!c0) { const c = mkConn(t("kind_kind"), "kind"); pe.push({ p: anchor.id, c: c.id }); c0 = c.id; } pe.push({ p: c0, c: target.id }); }
+    if (backendEnabled() && user) { // backend: persist via the server, then show the returned (access-filtered) tree
+      setPanel(null);
+      pushMutation(np, pe, se, sb)
+        .then(() => { setSelectedId(null); if (!existing && form.email) setToast({ type: "invite", person: target, inviter: anchor, kind }); else if (existing) setToast({ type: "merged", person: target }); })
+        .catch((ex) => setToast({ type: "notfound", q: ex.data?.detail || "could not save" }));
+      return;
+    }
     if (np.length) setPersons((ps) => [...ps, ...np]);
     if (pe.length) setParentOf((e) => [...e, ...pe]);
     if (se.length) setSpouse((e) => [...e, ...se]);
@@ -182,6 +219,11 @@ export default function MyFam() {
   const addFree = (form) => {
     const nextId = Math.max(0, ...persons.map((p) => p.id)) + 1;
     const target = newPersonFromForm(form, addAt.x, addAt.y, nextId);
+    if (backendEnabled() && user) {
+      setPanel(null); setAddAt(null);
+      pushMutation([target], [], [], []).then(() => { setSelectedId(null); setToast({ type: "free", person: target }); }).catch(() => {});
+      return;
+    }
     setPersons((ps) => [...ps, target]); setPanel(null); setAddAt(null); setSelectedId(target.id);
     setToast({ type: "free", person: target });
   };
@@ -239,11 +281,17 @@ export default function MyFam() {
       const nd = nodeDrag.current;
       if (nd.moved && dragPreview) {
         const { fromId, toId, relation } = dragPreview; const from = byId(fromId), to = byId(toId);
-        if (relation === "ouder") setParentOf((es) => [...es, { p: fromId, c: toId }]);
+        if (backendEnabled() && user) {
+          const parent = relation === "ouder" ? [{ p: fromId, c: toId }] : relation === "kind" ? [{ p: toId, c: fromId }] : [];
+          const spouseE = relation === "partner" ? [{ a: fromId, b: toId }] : [];
+          api.mutate({ newPersons: [], parent, spouse: spouseE, sibling: [] }).then(applyTree).catch(() => {});
+        } else if (relation === "ouder") setParentOf((es) => [...es, { p: fromId, c: toId }]);
         else if (relation === "kind") setParentOf((es) => [...es, { p: toId, c: fromId }]);
         else setSpouse((es) => [...es, { a: fromId, b: toId }]);
         setToast({ type: "connected", from, to, relation });
-      } else if (!nd.moved) { setSelectedId(nd.id); setHighlight(new Set()); }
+      } else if (nd.moved) { // repositioned only — persist the new coords in backend mode
+        if (backendEnabled() && user) { const p = personsRef.current.find((x) => x.id === nd.id); if (p) api.patchPerson(nd.id, { cx: p.cx, cy: p.cy }).catch(() => {}); }
+      } else { setSelectedId(nd.id); setHighlight(new Set()); }
       nodeDrag.current = { active: false }; setDragPreview(null); return;
     }
     if (panDrag.current.active) {
@@ -318,6 +366,17 @@ export default function MyFam() {
         </>}
         <button onClick={() => setPanel("connect")} style={pill(T.green, "#06140F")}><QrCode size={16} /> {t("connect")}</button>
         <button onClick={() => setPanel("share")} style={pill(T.surfaceUp, T.text)}><Share2 size={16} /> {t("share")}</button>
+        {user && <>
+          {access && !access.paid && access.locked > 0 && (
+            <button onClick={startUnlock} title={`${access.locked} more relatives are locked`} style={pill(T.gold, "#06140F")}>🔒 Unlock full tree · €0,99</button>
+          )}
+          {user.role === "admin" && <button onClick={() => setPanel("admin")} style={pill(T.surfaceUp, T.text)}><Users size={16} /> Admin</button>}
+          <div title={user.email} style={{ display: "flex", alignItems: "center", gap: 8, background: T.surfaceUp, border: `1px solid ${T.border}`, borderRadius: 999, padding: "5px 6px 5px 12px", fontSize: 12.5, color: T.text }}>
+            <span style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
+            {user.role === "admin" && <span style={{ fontFamily: mono, fontSize: 10, fontWeight: 700, color: "#06140F", background: T.gold, borderRadius: 6, padding: "1px 6px" }}>ADMIN</span>}
+            <button onClick={logout} title="Sign out" style={{ border: "none", background: "transparent", color: T.textSoft, cursor: "pointer", display: "grid", placeItems: "center", padding: 4 }}><X size={15} /></button>
+          </div>
+        </>}
       </header>
 
       {/* ---------- canvas ---------- */}
@@ -374,6 +433,7 @@ export default function MyFam() {
         {panel === "addFree" && <FreeAddPanel onClose={() => { setPanel(null); setAddAt(null); }} onSubmit={addFree} />}
         {panel === "connect" && <ConnectPanel onClose={() => setPanel(null)} onConnect={connectTo} />}
         {panel === "share" && <SharePanel me={me} onClose={() => setPanel(null)} />}
+        {panel === "admin" && <AdminPanel onClose={() => setPanel(null)} />}
         {verifyFor != null && <VerifyModal person={byId(verifyFor)} onCancel={() => setVerifyFor(null)} onConfirm={() => { const id = verifyFor; setPersons((ps) => ps.map((p) => p.id === id ? { ...p, fbVerified: true } : p)); setVerifyFor(null); setToast({ type: "verified", person: byId(id) }); }} />}
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
       </div>
@@ -941,3 +1001,34 @@ const lbl = { display: "block", fontSize: 11.5, fontWeight: 600, color: T.textSo
 const closeX = { position: "absolute", top: 12, right: 12, width: 28, height: 28, display: "grid", placeItems: "center", border: "none", background: "rgba(255,255,255,0.07)", borderRadius: 999, cursor: "pointer", color: T.text };
 const chip = { padding: "5px 11px", borderRadius: 999, border: `1px solid ${T.border}`, background: T.surfaceUp, fontSize: 12, cursor: "pointer", color: T.text, fontFamily: mono };
 const shareTile = { flex: 1, color: "#fff", borderRadius: 12, padding: "12px 6px", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, textDecoration: "none", border: "none" };
+
+/* ---------- admin: user management (admin role only) ---------- */
+const miniBtn = { border: "none", borderRadius: 999, padding: "5px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: mono };
+function AdminPanel({ onClose }) {
+  const [users, setUsers] = useState(null);
+  const [err, setErr] = useState(null);
+  const load = () => api.adminUsers().then((d) => setUsers(d.users)).catch((e) => setErr(e.message || "failed to load users"));
+  useEffect(() => { load(); }, []);
+  const toggle = (u, field) => {
+    const next = field === "paid" ? (u.paid ? 0 : 1) : u.role === "admin" ? "user" : "admin";
+    api.adminUpdateUser(u.id, { [field]: next }).then(load).catch(() => {});
+  };
+  return (
+    <Modal title="Admin · users" onClose={onClose}>
+      {err && <div style={{ fontSize: 13, color: "#E88A8A" }}>{err}</div>}
+      {!users && !err && <div style={{ fontSize: 13, color: T.textSoft }}>Loading…</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+        {users && users.map((u) => (
+          <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: T.surfaceUp, border: `1px solid ${T.border}`, borderRadius: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+              <div style={{ fontSize: 11, color: T.textSoft, fontFamily: mono }}>#{u.id}</div>
+            </div>
+            <button onClick={() => toggle(u, "role")} style={{ ...miniBtn, background: u.role === "admin" ? T.gold : T.surface, color: u.role === "admin" ? "#06140F" : T.textSoft }}>{u.role}</button>
+            <button onClick={() => toggle(u, "paid")} style={{ ...miniBtn, background: u.paid ? T.green : T.surface, color: u.paid ? "#06140F" : T.textSoft }}>{u.paid ? "paid" : "free"}</button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
