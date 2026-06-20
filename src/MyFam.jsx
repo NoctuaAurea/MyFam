@@ -9,6 +9,7 @@ import WORLD_BORDERS from "./worldBorders.js";
 import { t, setLang, getLang, isRTL, LANGS } from "./i18n.js";
 import { loadState, saveState } from "./storage.js";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import * as rel from "./relationships.js";
 
 /* ============================================================ *
  *  MyFam — donkere, dynamische stamboom
@@ -41,22 +42,8 @@ const CSS = `
 @keyframes vw-pulse { 0%,100%{transform:scale(1); opacity:.9;} 50%{transform:scale(1.18); opacity:1;} }
 `;
 
-/* ---------- fuzzy / transliteratie ---------- */
-const normalize = (s = "") =>
-  s.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/ou|oe/g, "u").replace(/kh|ch/g, "k").replace(/ph/g, "f")
-    .replace(/y/g, "i").replace(/w/g, "v").replace(/q/g, "k")
-    .replace(/(.)\1+/g, "$1").replace(/[^a-z]/g, "");
-const lev = (a, b) => {
-  const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
-  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
-  for (let j = 0; j <= n; j++) d[0][j] = j;
-  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
-    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return d[m][n];
-};
-const nameMatch = (f1, l1, f2, l2) =>
-  lev(normalize(f1), normalize(f2)) <= 1 && lev(normalize(l1), normalize(l2)) <= 1;
+/* Fuzzy name matching + the relationship/kinship engine now live in ./relationships.js
+   (imported as `rel`), extracted so the app's trickiest logic can be unit-tested. */
 
 const fullName = (p) => `${p.first} ${p.last}`.trim();
 const ageFrom = (b) => { if (!b) return null; const y = parseInt(b.slice(0, 4), 10); return y ? new Date().getFullYear() - y : null; };
@@ -151,33 +138,11 @@ export default function MyFam() {
   const onWheel = (e) => { if (mode !== "2d") return; e.preventDefault(); const r = containerRef.current.getBoundingClientRect(); zoomBy(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - r.left, e.clientY - r.top); };
 
   /* ---------- relatie-helpers ---------- */
-  const parentsOf = (id) => parentOf.filter((e) => e.c === id).map((e) => e.p);
-  const hasEdge = (a, b) =>
-    parentOf.some((e) => (e.p === a && e.c === b) || (e.p === b && e.c === a)) ||
-    spouse.some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)) ||
-    sibling.some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
-  const ancestors = (id) => { const out = new Map(); const q = [[id, 0]]; while (q.length) { const [c, d] = q.shift(); parentsOf(c).forEach((p) => { if (!out.has(p) || out.get(p) > d + 1) { out.set(p, d + 1); q.push([p, d + 1]); } }); } return out; };
-  const adjacency = () => { const adj = {}; const add = (a, b) => { (adj[a] = adj[a] || []).push(b); }; parentOf.forEach((e) => { add(e.p, e.c); add(e.c, e.p); }); spouse.forEach((e) => { add(e.a, e.b); add(e.b, e.a); }); sibling.forEach((e) => { add(e.a, e.b); add(e.b, e.a); }); return adj; };
-  const bfsPath = (src, dst) => { const adj = adjacency(); const prev = { [src]: null }; const q = [src]; while (q.length) { const c = q.shift(); if (c === dst) break; (adj[c] || []).forEach((n) => { if (!(n in prev)) { prev[n] = c; q.push(n); } }); } if (!(dst in prev)) return null; const path = []; let c = dst; while (c !== null && c !== undefined) { path.unshift(c); c = prev[c]; } return path[0] === src ? path : null; };
-  const relationship = (idA, idB) => {
-    if (idA === idB) return { label: t("rel_same"), via: null };
-    if (spouse.some((e) => (e.a === idA && e.b === idB) || (e.a === idB && e.b === idA))) return { label: t("rel_partners"), via: null };
-    if (sibling.some((e) => (e.a === idA && e.b === idB) || (e.a === idB && e.b === idA))) return { label: t("rel_siblings"), via: null };
-    const aA = ancestors(idA); aA.set(idA, 0); const aB = ancestors(idB); aB.set(idB, 0);
-    let best = null; aA.forEach((da, anc) => { if (aB.has(anc)) { const s = da + aB.get(anc); if (!best || s < best.s) best = { anc, da, db: aB.get(anc), s }; } });
-    if (best) {
-      const { anc, da, db } = best;
-      const up = ["", t("up_1"), t("up_2"), t("up_3"), t("up_4")], down = ["", t("down_1"), t("down_2"), t("down_3")];
-      if (da === 0) return { label: `${up[db] || t("up_1")} ${t("and")} ${down[db] || t("down_1")}`, via: anc };
-      if (db === 0) return { label: `${up[da] || t("up_1")} ${t("and")} ${down[da] || t("down_1")}`, via: anc };
-      if (da === 1 && db === 1) return { label: t("rel_siblings"), via: anc };
-      const mn = Math.min(da, db);
-      if (mn === 1) return { label: t("rel_uncle"), via: anc };
-      if (da === 2 && db === 2) return { label: t("rel_cousins1"), via: anc };
-      return { label: t("rel_cousinsDeg", { n: mn }), via: anc };
-    }
-    return { label: t("rel_none"), via: null };
-  };
+  /* relationship engine — pure logic lives in ./relationships.js; these thin wrappers
+     bind the current edge-list state (and t() for localized labels). */
+  const hasEdge = (a, b) => rel.hasEdge(parentOf, spouse, sibling, a, b);
+  const bfsPath = (src, dst) => rel.bfsPath(parentOf, spouse, sibling, src, dst);
+  const relationship = (idA, idB) => rel.relationship(parentOf, spouse, sibling, idA, idB, t);
 
   /* ---------- toevoegen via relatie (uit detailkaart) ---------- */
   const GEN_DY = { grootouder: -460, ouder: -230, "oom/tante": -230, "broer/zus": 0, partner: 0, "neef/nicht": 0, kind: 230, kleinkind: 460 };
@@ -270,7 +235,7 @@ export default function MyFam() {
   /* ---------- verbinden (onbekende) ---------- */
   const connectTo = (query) => {
     const q = query.trim(); let found = persons.find((p) => p.username === q.toLowerCase() && p.id !== meId);
-    if (!found) { const parts = q.split(/\s+/); found = persons.find((p) => p.id !== meId && (nameMatch(parts[0] || "", parts[1] || p.last, p.first, p.last) || normalize(p.first).includes(normalize(parts[0] || "____")))); }
+    if (!found) { const parts = q.split(/\s+/); found = persons.find((p) => p.id !== meId && (rel.nameMatch(parts[0] || "", parts[1] || p.last, p.first, p.last) || rel.normalize(p.first).includes(rel.normalize(parts[0] || "____")))); }
     if (!found) { setToast({ type: "notfound", q }); return; }
     const rel = relationship(meId, found.id); const path = bfsPath(meId, found.id) || [];
     setHighlight(new Set(path)); setSelectedId(found.id); centerOn(found.cx, found.cy); setPanel(null);
@@ -795,7 +760,7 @@ function AddPanel({ anchor, persons, onClose, onSubmit }) {
   const [f, setF] = useState({ kind: "ouder", first: "", last: anchor.last, birth: "", city: "", birthCity: "", email: "", insta: "", fb: "", gender: "" });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const kinds = ["grootouder", "ouder", "oom/tante", "broer/zus", "partner", "neef/nicht", "kind", "kleinkind"];
-  const suggestions = (f.first.length >= 2 && f.last.length >= 2) ? persons.filter((p) => p.id !== anchor.id && nameMatch(f.first, f.last, p.first, p.last)) : [];
+  const suggestions = (f.first.length >= 2 && f.last.length >= 2) ? persons.filter((p) => p.id !== anchor.id && rel.nameMatch(f.first, f.last, p.first, p.last)) : [];
   return (
     <Modal title={t("addTitle", { name: anchor.first })} onClose={onClose}>
       <label style={lbl}>{t("relationTo", { name: anchor.first })}</label>
