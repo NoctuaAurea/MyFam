@@ -30,6 +30,9 @@ wrangler d1 execute myfam --remote --file=./schema.sql
 wrangler secret put MOLLIE_API_KEY                        # rotated key — never commit
 wrangler secret put ADMIN_PASSWORD
 wrangler deploy
+
+# Point the frontend at the deployed worker
+echo 'VITE_API_BASE=https://myfam-api.YOUR-SUBDOMAIN.workers.dev' > ../.env.local
 ```
 
 ## Architecture
