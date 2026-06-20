@@ -414,22 +414,29 @@ const cityGeo = (city) => {
 function GlobeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
   const mountRef = useRef(null);
   const onSelectRef = useRef(onSelect); useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  const dataRef = useRef(null); dataRef.current = { persons, parentOf, spouse, sibling, youId };
+  const rebuildRef = useRef(null);
+  const builtRef = useRef(false);
   const stats = (() => {
     const cities = new Set(), countries = new Set();
     persons.forEach((p) => { if (p.city) { cities.add(normCity(p.city)); countries.add(cityGeo(p.city).country); } });
     return { members: persons.length, relations: parentOf.length + spouse.length + sibling.length, cities: cities.size, countries: countries.size };
   })();
 
+  /* Build renderer/scene/camera/static globe/orbit/animation ONCE. City pins, flags,
+     arcs and labels live in a content group rebuilt by the data effect below, so the
+     camera is never reset when the family changes. */
   useEffect(() => {
     const mount = mountRef.current; if (!mount) return;
     let W = mount.clientWidth, H = mount.clientHeight;
     const scene = new THREE.Scene(); scene.background = new THREE.Color("#070F0C");
     const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 5000);
     const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setSize(W, H); mount.appendChild(renderer.domElement);
-    const R = 120, group = new THREE.Group(); scene.add(group);
+    const R = 120, group = new THREE.Group(); scene.add(group); // whole globe (intro-scaled)
 
     const llToVec = (lat, lng, r) => { const phi = (90 - lat) * Math.PI / 180, theta = (lng + 180) * Math.PI / 180; return new THREE.Vector3(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta)); };
 
+    // static base (built once)
     group.add(new THREE.Mesh(new THREE.SphereGeometry(R * 0.99, 48, 48), new THREE.MeshBasicMaterial({ color: 0x0a2230 })));
     group.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.09, 32, 32), new THREE.MeshBasicMaterial({ color: 0x2f9e6b, transparent: true, opacity: 0.06, side: THREE.BackSide })));
     const bmat = new THREE.LineBasicMaterial({ color: 0x4fb58a, transparent: true, opacity: 0.6 });
@@ -437,34 +444,40 @@ function GlobeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
     const gmat = new THREE.LineBasicMaterial({ color: 0x244a40, transparent: true, opacity: 0.22 });
     { const pts = []; for (let t = 0; t <= 360; t += 6) pts.push(llToVec(0, t - 180, R)); group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), gmat)); }
 
-    const makeLabel = (text, color) => {
-      const c = document.createElement("canvas"), ctx = c.getContext("2d"), fs = 42; ctx.font = `600 ${fs}px Inter,sans-serif`;
-      const w = Math.ceil(ctx.measureText(text).width); c.width = w + 22; c.height = fs + 16; ctx.font = `600 ${fs}px Inter,sans-serif`; ctx.fillStyle = color; ctx.textBaseline = "middle"; ctx.fillText(text, 11, c.height / 2);
-      const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })); const s = 0.16; sp.scale.set(c.width * s, c.height * s, 1); return sp;
-    };
-
-    const youCity = normCity((persons.find((p) => p.id === youId) || {}).city || "");
-    const byCity = {}; persons.forEach((p) => { if (!p.city) return; const k = normCity(p.city); (byCity[k] = byCity[k] || { members: [], city: p.city }).members.push(p); });
-    const cityVec = {}; const pick = []; const labelData = [];
-    Object.keys(byCity).forEach((k) => {
-      const g = cityGeo(byCity[k].city); const base = llToVec(g.lat, g.lng, R); cityVec[k] = base;
-      const normal = base.clone().normalize(); const isYou = k === youCity; const col = isYou ? 0xE8B24C : 0x3FB985;
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 16, 6), new THREE.MeshBasicMaterial({ color: 0xEAF2ED })); pole.position.copy(base.clone().add(normal.clone().multiplyScalar(8))); pole.quaternion.copy(q); group.add(pole);
-      const tangent = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(0, 1, 0)); if (tangent.length() < 0.1) tangent.set(1, 0, 0); tangent.normalize();
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(9, 6), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide })); flag.position.copy(base.clone().add(normal.clone().multiplyScalar(14)).add(tangent.clone().multiplyScalar(4.5))); flag.quaternion.copy(q); group.add(flag);
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(2.2, 12, 12), new THREE.MeshBasicMaterial({ color: col })); dot.position.copy(base); dot.userData.city = k; group.add(dot); pick.push(dot, pole, flag); flag.userData.city = k; pole.userData.city = k;
-      const n = byCity[k].members.length; labelData.push({ key: k, text: `${byCity[k].city}${n > 1 ? ` · ${n}` : ""}`, vec: base.clone().add(normal.clone().multiplyScalar(16)), isYou, count: n });
-    });
-
-    const arc = (a, b, color) => { if (!cityVec[a] || !cityVec[b] || a === b) return; const s = cityVec[a], e = cityVec[b]; const mid = s.clone().add(e).multiplyScalar(0.5).normalize().multiplyScalar(R + s.distanceTo(e) * 0.4 + 8); const pts = new THREE.QuadraticBezierCurve3(s, mid, e).getPoints(30); group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 }))); };
-    const cityOf = (id) => { const p = persons.find((x) => x.id === id); return p && p.city ? normCity(p.city) : null; };
-    parentOf.forEach((e) => arc(cityOf(e.p), cityOf(e.c), 0x3FB985));
-    spouse.forEach((e) => arc(cityOf(e.a), cityOf(e.b), 0xE8B24C));
-    sibling.forEach((e) => arc(cityOf(e.a), cityOf(e.b), 0x3FB985));
-
+    const contentGroup = new THREE.Group(); group.add(contentGroup); // city pins/flags/dots/arcs (rebuilt)
     const labelLayer = document.createElement("div"); labelLayer.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:3;"; mount.appendChild(labelLayer);
-    const labels = labelData.map((d) => { const el = document.createElement("div"); el.textContent = d.text; el.style.cssText = `position:absolute;left:0;top:0;white-space:nowrap;font:600 11px Inter,sans-serif;padding:2px 7px;border-radius:8px;background:rgba(7,15,12,.8);border:1px solid ${d.isYou ? "#E8B24C" : "rgba(234,242,237,.18)"};color:${d.isYou ? "#F6D690" : "#EAF2ED"};box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;`; labelLayer.appendChild(el); return { d, el }; });
+
+    let labels = [], pick = [], byCity = {}, cityVec = {};
+    const disposeChild = (o) => o.traverse?.((c) => { c.geometry?.dispose?.(); const mm = c.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); });
+
+    const rebuild = () => {
+      const { persons, parentOf, spouse, sibling, youId } = dataRef.current;
+      for (let i = contentGroup.children.length - 1; i >= 0; i--) { const o = contentGroup.children[i]; disposeChild(o); contentGroup.remove(o); }
+      while (labelLayer.firstChild) labelLayer.removeChild(labelLayer.firstChild);
+      byCity = {}; cityVec = {}; pick = []; const labelData = [];
+      const youCity = normCity((persons.find((p) => p.id === youId) || {}).city || "");
+      persons.forEach((p) => { if (!p.city) return; const k = normCity(p.city); (byCity[k] = byCity[k] || { members: [], city: p.city }).members.push(p); });
+      Object.keys(byCity).forEach((k) => {
+        const g = cityGeo(byCity[k].city); const base = llToVec(g.lat, g.lng, R); cityVec[k] = base;
+        const normal = base.clone().normalize(); const isYou = k === youCity; const col = isYou ? 0xE8B24C : 0x3FB985;
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 16, 6), new THREE.MeshBasicMaterial({ color: 0xEAF2ED })); pole.position.copy(base.clone().add(normal.clone().multiplyScalar(8))); pole.quaternion.copy(q); contentGroup.add(pole);
+        const tangent = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(0, 1, 0)); if (tangent.length() < 0.1) tangent.set(1, 0, 0); tangent.normalize();
+        const flag = new THREE.Mesh(new THREE.PlaneGeometry(9, 6), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide })); flag.position.copy(base.clone().add(normal.clone().multiplyScalar(14)).add(tangent.clone().multiplyScalar(4.5))); flag.quaternion.copy(q); contentGroup.add(flag);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(2.2, 12, 12), new THREE.MeshBasicMaterial({ color: col })); dot.position.copy(base); dot.userData.city = k; contentGroup.add(dot); pick.push(dot, pole, flag); flag.userData.city = k; pole.userData.city = k;
+        const n = byCity[k].members.length; labelData.push({ key: k, text: `${byCity[k].city}${n > 1 ? ` · ${n}` : ""}`, vec: base.clone().add(normal.clone().multiplyScalar(16)), isYou, count: n });
+      });
+
+      const arc = (a, b, color) => { if (!cityVec[a] || !cityVec[b] || a === b) return; const s = cityVec[a], e = cityVec[b]; const mid = s.clone().add(e).multiplyScalar(0.5).normalize().multiplyScalar(R + s.distanceTo(e) * 0.4 + 8); const pts = new THREE.QuadraticBezierCurve3(s, mid, e).getPoints(30); contentGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 }))); };
+      const cityOf = (id) => { const p = persons.find((x) => x.id === id); return p && p.city ? normCity(p.city) : null; };
+      parentOf.forEach((e) => arc(cityOf(e.p), cityOf(e.c), 0x3FB985));
+      spouse.forEach((e) => arc(cityOf(e.a), cityOf(e.b), 0xE8B24C));
+      sibling.forEach((e) => arc(cityOf(e.a), cityOf(e.b), 0x3FB985));
+
+      labels = labelData.map((d) => { const el = document.createElement("div"); el.textContent = d.text; el.style.cssText = `position:absolute;left:0;top:0;white-space:nowrap;font:600 11px Inter,sans-serif;padding:2px 7px;border-radius:8px;background:rgba(7,15,12,.8);border:1px solid ${d.isYou ? "#E8B24C" : "rgba(234,242,237,.18)"};color:${d.isYou ? "#F6D690" : "#EAF2ED"};box-shadow:0 2px 8px rgba(0,0,0,.4);display:none;`; labelLayer.appendChild(el); return { d, el }; });
+    };
+    rebuildRef.current = rebuild;
+    rebuild(); // initial build (the data effect skips its first run)
 
     const orbit = { radius: 360, theta: 0.5, phi: 1.15, drag: false, lx: 0, ly: 0, moved: 0, auto: true, t: 0 };
     const applyCam = () => { const r = orbit.radius; camera.position.set(r * Math.sin(orbit.phi) * Math.sin(orbit.theta), r * Math.cos(orbit.phi), r * Math.sin(orbit.phi) * Math.cos(orbit.theta)); camera.lookAt(0, 0, 0); };
@@ -497,8 +510,11 @@ function GlobeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
     applyCam(); animate();
     const onResize = () => { W = mount.clientWidth; H = mount.clientHeight; camera.aspect = W / H; camera.updateProjectionMatrix(); renderer.setSize(W, H); };
     window.addEventListener("resize", onResize);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("resize", onResize); el.removeEventListener("pointerdown", down); el.removeEventListener("wheel", wheel); if (labelLayer.parentNode === mount) mount.removeChild(labelLayer); try { scene.traverse((o) => { o.geometry?.dispose?.(); const mm = o.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); }); } catch { /* ignore */ } renderer.dispose(); if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement); };
-  }, [persons, parentOf, spouse, sibling, youId]);
+    return () => { cancelAnimationFrame(raf); rebuildRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("resize", onResize); el.removeEventListener("pointerdown", down); el.removeEventListener("wheel", wheel); if (labelLayer.parentNode === mount) mount.removeChild(labelLayer); try { scene.traverse((o) => { o.geometry?.dispose?.(); const mm = o.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); }); } catch { /* ignore */ } renderer.dispose(); if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement); };
+  }, []); // build once
+
+  /* Rebuild only the content group when the family changes — camera/renderer untouched. */
+  useEffect(() => { if (!builtRef.current) { builtRef.current = true; return; } rebuildRef.current?.(); }, [persons, parentOf, spouse, sibling, youId]);
 
   return (
     <div ref={mountRef} style={{ position: "absolute", inset: 0, touchAction: "none", cursor: "grab" }}>
@@ -522,6 +538,13 @@ function GlobeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
 function ThreeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
   const mountRef = useRef(null);
   const onSelectRef = useRef(onSelect); useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  const dataRef = useRef(null); dataRef.current = { persons, parentOf, spouse, sibling, youId };
+  const rebuildRef = useRef(null);
+  const builtRef = useRef(false);
+
+  /* Build renderer/scene/camera/orbit/animation ONCE on mount. Data-driven content
+     (nodes, edges, labels) lives in a persistent group rebuilt by the data effect
+     below, so the camera/orbit is never reset when the family changes. */
   useEffect(() => {
     const mount = mountRef.current; if (!mount) return;
     let W = mount.clientWidth, H = mount.clientHeight;
@@ -534,37 +557,8 @@ function ThreeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
     renderer.setSize(W, H);
     mount.appendChild(renderer.domElement);
 
-    const idsOf = (arr, f) => arr.map(f);
-    const parentsOf = (id) => idsOf(parentOf.filter((e) => e.c === id), (e) => e.p);
-    const childrenOf = (id) => idsOf(parentOf.filter((e) => e.p === id), (e) => e.c);
-    const spousesOf = (id) => parentOf && spouse.filter((e) => e.a === id || e.b === id).map((e) => e.a === id ? e.b : e.a);
-    const sibsOf = (id) => sibling.filter((e) => e.a === id || e.b === id).map((e) => e.a === id ? e.b : e.a);
-
-    /* generatieniveau t.o.v. 'jij' */
-    const level = {}; const q = [[youId, 0]]; level[youId] = 0;
-    while (q.length) {
-      const [cur, lv] = q.shift();
-      parentsOf(cur).forEach((p) => { if (!(p in level)) { level[p] = lv + 1; q.push([p, lv + 1]); } });
-      childrenOf(cur).forEach((c) => { if (!(c in level)) { level[c] = lv - 1; q.push([c, lv - 1]); } });
-      [...spousesOf(cur), ...sibsOf(cur)].forEach((s) => { if (!(s in level)) { level[s] = lv; q.push([s, lv]); } });
-    }
-    persons.forEach((p) => { if (!(p.id in level)) level[p.id] = -Math.round((p.cy || 0) / 230); });
-
-    /* ring-layout per generatie */
-    const byLevel = {}; persons.forEach((p) => { (byLevel[level[p.id]] = byLevel[level[p.id]] || []).push(p); });
-    const pos = {};
-    Object.keys(byLevel).forEach((lv) => {
-      const arr = byLevel[lv].slice().sort((a, b) => (a.cx || 0) - (b.cx || 0));
-      const n = arr.length; const radius = n === 1 ? 0 : 40 + n * 13; const yoff = Number(lv) * 78;
-      arr.forEach((p, idx) => { const ang = (idx / Math.max(1, n)) * Math.PI * 2 + Number(lv) * 0.7; pos[p.id] = new THREE.Vector3(Math.cos(ang) * radius, yoff, Math.sin(ang) * radius); });
-    });
-    const levels = Object.keys(byLevel).map(Number); const centerY = (Math.max(...levels) + Math.min(...levels)) / 2 * 78;
-
-    const group = new THREE.Group(); scene.add(group);
-    const mkLine = (a, b, color, op) => { const g = new THREE.BufferGeometry().setFromPoints([pos[a], pos[b]]); const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: op }); group.add(new THREE.Line(g, m)); };
-    parentOf.forEach((e) => { if (pos[e.p] && pos[e.c]) mkLine(e.p, e.c, 0x3a7a5e, 0.55); });
-    spouse.forEach((e) => { if (pos[e.a] && pos[e.b]) mkLine(e.a, e.b, 0xc9912f, 0.5); });
-    sibling.forEach((e) => { if (pos[e.a] && pos[e.b]) mkLine(e.a, e.b, 0x3a7a5e, 0.3); });
+    const group = new THREE.Group(); scene.add(group); // persistent; intro-scaled; holds rebuilt content
+    let nodeMeshes = [];
 
     const makeLabel = (text, color) => {
       const c = document.createElement("canvas"); const ctx = c.getContext("2d"); const fs = 46;
@@ -574,19 +568,62 @@ function ThreeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
       const s = 0.13; sp.scale.set(c.width * s, c.height * s, 1); return sp;
     };
+    const disposeChild = (o) => o.traverse?.((c) => { c.geometry?.dispose?.(); const mm = c.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); });
+    const clearGroup = () => { for (let i = group.children.length - 1; i >= 0; i--) { const o = group.children[i]; disposeChild(o); group.remove(o); } };
 
-    const nodeMeshes = [];
-    persons.forEach((p) => {
-      const v = pos[p.id]; if (!v) return; const me = p.id === youId;
-      const col = me ? 0xE8B24C : new THREE.Color(["#4FA3C7", "#C79A4F", "#C77FA8", "#6FB85C", "#9B7FD1", "#C77F5C"][p.id % 6]).getHex();
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(me ? 13 : 8, 20, 20), new THREE.MeshBasicMaterial({ color: col }));
-      mesh.position.copy(v); mesh.userData.id = p.id; group.add(mesh); nodeMeshes.push(mesh);
-      if (me) { const halo = new THREE.Mesh(new THREE.SphereGeometry(22, 20, 20), new THREE.MeshBasicMaterial({ color: 0xE8B24C, transparent: true, opacity: 0.18 })); halo.position.copy(v); group.add(halo); }
-      const lab = makeLabel(fullName(p), me ? "#F6D690" : "#EAF2ED"); lab.position.set(v.x, v.y + (me ? 22 : 15), v.z); group.add(lab);
-    });
+    const orbit = { radius: 520, theta: 0.6, phi: 1.12, ty: 0, drag: false, lx: 0, ly: 0, moved: 0, auto: true };
+    let firstBuild = true;
+
+    const rebuild = () => {
+      const { persons, parentOf, spouse, sibling, youId } = dataRef.current;
+      clearGroup();
+      const idsOf = (arr, f) => arr.map(f);
+      const parentsOf = (id) => idsOf(parentOf.filter((e) => e.c === id), (e) => e.p);
+      const childrenOf = (id) => idsOf(parentOf.filter((e) => e.p === id), (e) => e.c);
+      const spousesOf = (id) => parentOf && spouse.filter((e) => e.a === id || e.b === id).map((e) => e.a === id ? e.b : e.a);
+      const sibsOf = (id) => sibling.filter((e) => e.a === id || e.b === id).map((e) => e.a === id ? e.b : e.a);
+
+      /* generatieniveau t.o.v. 'jij' */
+      const level = {}; const q = [[youId, 0]]; level[youId] = 0;
+      while (q.length) {
+        const [cur, lv] = q.shift();
+        parentsOf(cur).forEach((p) => { if (!(p in level)) { level[p] = lv + 1; q.push([p, lv + 1]); } });
+        childrenOf(cur).forEach((c) => { if (!(c in level)) { level[c] = lv - 1; q.push([c, lv - 1]); } });
+        [...spousesOf(cur), ...sibsOf(cur)].forEach((s) => { if (!(s in level)) { level[s] = lv; q.push([s, lv]); } });
+      }
+      persons.forEach((p) => { if (!(p.id in level)) level[p.id] = -Math.round((p.cy || 0) / 230); });
+
+      /* ring-layout per generatie */
+      const byLevel = {}; persons.forEach((p) => { (byLevel[level[p.id]] = byLevel[level[p.id]] || []).push(p); });
+      const pos = {};
+      Object.keys(byLevel).forEach((lv) => {
+        const arr = byLevel[lv].slice().sort((a, b) => (a.cx || 0) - (b.cx || 0));
+        const n = arr.length; const radius = n === 1 ? 0 : 40 + n * 13; const yoff = Number(lv) * 78;
+        arr.forEach((p, idx) => { const ang = (idx / Math.max(1, n)) * Math.PI * 2 + Number(lv) * 0.7; pos[p.id] = new THREE.Vector3(Math.cos(ang) * radius, yoff, Math.sin(ang) * radius); });
+      });
+      const levels = Object.keys(byLevel).map(Number); const centerY = (Math.max(...levels) + Math.min(...levels)) / 2 * 78;
+      if (firstBuild) { orbit.ty = centerY; firstBuild = false; } // center camera on first build only
+
+      const mkLine = (a, b, color, op) => { const g = new THREE.BufferGeometry().setFromPoints([pos[a], pos[b]]); const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: op }); group.add(new THREE.Line(g, m)); };
+      parentOf.forEach((e) => { if (pos[e.p] && pos[e.c]) mkLine(e.p, e.c, 0x3a7a5e, 0.55); });
+      spouse.forEach((e) => { if (pos[e.a] && pos[e.b]) mkLine(e.a, e.b, 0xc9912f, 0.5); });
+      sibling.forEach((e) => { if (pos[e.a] && pos[e.b]) mkLine(e.a, e.b, 0x3a7a5e, 0.3); });
+
+      const meshes = [];
+      persons.forEach((p) => {
+        const v = pos[p.id]; if (!v) return; const me = p.id === youId;
+        const col = me ? 0xE8B24C : new THREE.Color(["#4FA3C7", "#C79A4F", "#C77FA8", "#6FB85C", "#9B7FD1", "#C77F5C"][p.id % 6]).getHex();
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(me ? 13 : 8, 20, 20), new THREE.MeshBasicMaterial({ color: col }));
+        mesh.position.copy(v); mesh.userData.id = p.id; group.add(mesh); meshes.push(mesh);
+        if (me) { const halo = new THREE.Mesh(new THREE.SphereGeometry(22, 20, 20), new THREE.MeshBasicMaterial({ color: 0xE8B24C, transparent: true, opacity: 0.18 })); halo.position.copy(v); group.add(halo); }
+        const lab = makeLabel(fullName(p), me ? "#F6D690" : "#EAF2ED"); lab.position.set(v.x, v.y + (me ? 22 : 15), v.z); group.add(lab);
+      });
+      nodeMeshes = meshes;
+    };
+    rebuildRef.current = rebuild;
+    rebuild(); // initial build (the data effect skips its first run)
 
     /* eigen orbit-besturing */
-    const orbit = { radius: 520, theta: 0.6, phi: 1.12, ty: centerY, drag: false, lx: 0, ly: 0, moved: 0, auto: true };
     const applyCam = () => { const r = orbit.radius; camera.position.set(r * Math.sin(orbit.phi) * Math.sin(orbit.theta), orbit.ty + r * Math.cos(orbit.phi), r * Math.sin(orbit.phi) * Math.cos(orbit.theta)); camera.lookAt(0, orbit.ty, 0); };
     const el = renderer.domElement;
     const down = (e) => { orbit.drag = true; orbit.auto = false; orbit.lx = e.clientX; orbit.ly = e.clientY; orbit.moved = 0; };
@@ -608,8 +645,11 @@ function ThreeView({ persons, parentOf, spouse, sibling, youId, onSelect }) {
     const onResize = () => { W = mount.clientWidth; H = mount.clientHeight; camera.aspect = W / H; camera.updateProjectionMatrix(); renderer.setSize(W, H); };
     window.addEventListener("resize", onResize);
 
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("resize", onResize); el.removeEventListener("pointerdown", down); el.removeEventListener("wheel", wheel); try { scene.traverse((o) => { o.geometry?.dispose?.(); const mm = o.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); }); } catch { /* ignore */ } renderer.dispose(); if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement); };
-  }, [persons, parentOf, spouse, sibling, youId]);
+    return () => { cancelAnimationFrame(raf); rebuildRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("resize", onResize); el.removeEventListener("pointerdown", down); el.removeEventListener("wheel", wheel); try { scene.traverse((o) => { o.geometry?.dispose?.(); const mm = o.material; if (mm) (Array.isArray(mm) ? mm : [mm]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); }); } catch { /* ignore */ } renderer.dispose(); if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement); };
+  }, []); // build once
+
+  /* Rebuild only the content group when the family changes — camera/renderer untouched. */
+  useEffect(() => { if (!builtRef.current) { builtRef.current = true; return; } rebuildRef.current?.(); }, [persons, parentOf, spouse, sibling, youId]);
 
   return (
     <div ref={mountRef} style={{ position: "absolute", inset: 0, touchAction: "none", cursor: "grab" }}>
