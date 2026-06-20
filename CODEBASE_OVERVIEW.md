@@ -2,6 +2,8 @@
 
 > Orientation document + stability roadmap.
 > Written 2026-06-20 from a full read of the source. Line references point at `MyFam.jsx` unless noted.
+>
+> **Update (2026-06-20):** the project is now under git, and the P0 foundations + top runtime fixes from §11/§13 have been applied and committed — see the checklist in §13 for exactly what changed and what's still open. Line numbers below reflect the *original* read and may be off by a few lines after the hardening edits.
 
 ---
 
@@ -306,14 +308,19 @@ There's a fork in the road, and the right first steps are the same on both paths
 
 ## 13. Quick-wins checklist
 
-- [ ] Unzip `myfam-source.zip` as the canonical project; `git init`; remove duplicate copies.
-- [ ] Move `sharp` to `devDependencies`.
-- [ ] Add `<ErrorBoundary>` around the view switch.
-- [ ] Add ESLint + Prettier (with `react-hooks` rules).
-- [ ] Delete the unused `ord` helper (155).
-- [ ] Persist `persons`/`parentOf`/`spouse`/`sibling` to `localStorage`.
-- [ ] Build each Three.js scene once; dispose geometries/materials/textures on unmount.
-- [ ] Replace `id === 1` coupling with a `meId` in state.
+**Done in the 2026-06-20 hardening commit:**
+- [x] Make `myfam-source.zip` the canonical project; `git init` (branch `main`); duplicates moved to `archive/` (preserved, not deleted; gitignored).
+- [x] Move `sharp` to `devDependencies`.
+- [x] Add `<ErrorBoundary>` (`src/ErrorBoundary.jsx`) — wraps the app root *and* each Three.js view (with a "back to 2D" fallback).
+- [x] Add ESLint + Prettier config + `lint`/`format` scripts. *(Run `npm install` to activate.)*
+- [x] Delete the unused `ord` helper.
+- [x] Persist `persons`/`parentOf`/`spouse`/`sibling`/`meId` to `localStorage` (`src/storage.js`, debounced).
+- [x] Dispose Three.js geometries/materials/textures on unmount in both 3D views — stops the GPU leak.
+- [x] Replace the `id === 1` coupling with a `meId` in state.
+
+**Still open:**
+- [ ] Build each Three.js scene **once** and update it incrementally. The leak is fixed, but the scene still tears down and **resets the camera** on every data change (deps `[persons, parentOf, spouse, sibling, meId]`).
 - [ ] Add pinch-to-zoom on the 2D canvas.
-- [ ] Extract + unit-test `relationship`, `bfsPath`, `nameMatch`.
+- [ ] Extract + unit-test `relationship`, `bfsPath`, `nameMatch` (needs a test runner).
+- [ ] **Verify the build:** no Node toolchain was available in the setup environment, so `npm install && npm run build` has **not** been run. Do this before relying on the changes.
 ```
