@@ -390,7 +390,7 @@ export default function MyFam() {
       {/* ---------- canvas ---------- */}
       <div ref={containerRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onWheel={onWheel}
         style={{ position: "relative", flex: 1, overflow: "hidden", cursor: nodeDrag.current.active ? "grabbing" : "grab", background: `radial-gradient(130% 130% at 50% 30%, #1A1E1C 0%, #111413 100%)`, touchAction: "none" }}>
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(rgba(234,242,237,0.07) 1px, transparent 1px)`, backgroundSize: "22px 22px" }} />
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(rgba(234,242,237,0.07) 1px, transparent 1px)`, backgroundSize: `${22 * view.k}px ${22 * view.k}px`, backgroundPosition: `${view.x}px ${view.y}px` }} />
         <div style={{ position: "absolute", inset: 0, opacity: 0.5, pointerEvents: "none", backgroundImage: `radial-gradient(circle at 22% 18%, rgba(63,185,133,0.07), transparent 42%), radial-gradient(circle at 82% 72%, rgba(232,178,76,0.06), transparent 46%)` }} />
 
         {mode === "2d" && <>
