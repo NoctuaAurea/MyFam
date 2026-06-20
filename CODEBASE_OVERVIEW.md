@@ -322,8 +322,8 @@ There's a fork in the road, and the right first steps are the same on both paths
 - [x] Route the remaining hardcoded Dutch UI strings (age units, "you", connector label, drag-to-connect preview) through i18n across all 7 languages.
 - [x] Build each Three.js scene **once**; rebuild only the content group on data change so the camera is no longer reset (both 4D and globe). Confirmed: adding a relative while in 4D updates the scene in place without a camera jump.
 - [x] Verify build & run: `npm install && npm run build` pass; app runs at `localhost:5173`; persistence, `meId`, i18n, and both 3D views confirmed via the browser preview.
+- [x] Extract the relationship engine into a pure, testable `src/relationships.js`; add Vitest + 20 unit tests (`npm test`) covering name matching, BFS pathing, and every kinship branch.
+- [x] Add two-finger pinch-to-zoom on the 2D canvas (verified: spread 100%→240%, pinch-in 240%→77%).
 
-**Still open:**
-- [ ] Add pinch-to-zoom on the 2D canvas.
-- [ ] Extract + unit-test `relationship`, `bfsPath`, `nameMatch` (needs a test runner).
+**All the quick-wins above are done.** Larger follow-ups remain in §11 — notably TypeScript (P2 #10), the `@react-three/fiber` migration (P2 #12), code-splitting the ~840 kB bundle, and the P3 productization track (backend, auth, privacy/GDPR) if MyFam moves past prototype.
 ```
