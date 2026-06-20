@@ -217,6 +217,26 @@ export default function MyFam() {
     return () => { document.head.removeChild(l); clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
+  /* Block *browser* page-zoom (pinch / ⌘/Ctrl+wheel / ⌘± ) everywhere so the top
+     menu can never be scaled out of view — only our canvas zoom should ever fire. */
+  useEffect(() => {
+    const stopZoom = (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); };
+    const stopGesture = (e) => e.preventDefault(); // Safari pinch
+    const onKey = (e) => { if ((e.ctrlKey || e.metaKey) && ["+", "-", "=", "0"].includes(e.key)) e.preventDefault(); };
+    window.addEventListener("wheel", stopZoom, { passive: false });
+    window.addEventListener("gesturestart", stopGesture, { passive: false });
+    window.addEventListener("gesturechange", stopGesture, { passive: false });
+    window.addEventListener("gestureend", stopGesture, { passive: false });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("wheel", stopZoom);
+      window.removeEventListener("gesturestart", stopGesture);
+      window.removeEventListener("gesturechange", stopGesture);
+      window.removeEventListener("gestureend", stopGesture);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
   const screenToWorld = (clientX, clientY) => {
     const r = containerRef.current.getBoundingClientRect(); const v = viewRef.current;
     return { x: (clientX - r.left - v.x) / v.k, y: (clientY - r.top - v.y) / v.k };
