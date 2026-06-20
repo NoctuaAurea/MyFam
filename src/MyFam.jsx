@@ -167,7 +167,7 @@ export default function MyFam() {
     const px = sx ?? r.width / 2, py = sy ?? r.height / 2;
     setView((v) => { const nk = Math.min(2.4, Math.max(0.3, v.k * factor)); const wx = (px - v.x) / v.k, wy = (py - v.y) / v.k; return { k: nk, x: px - wx * nk, y: py - wy * nk }; });
   };
-  const onWheel = (e) => { if (mode !== "2d") return; e.preventDefault(); const r = containerRef.current.getBoundingClientRect(); zoomBy(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - r.left, e.clientY - r.top); };
+  const onWheel = (e) => { if (mode !== "2d") return; e.preventDefault(); const r = containerRef.current.getBoundingClientRect(); const d = Math.max(-50, Math.min(50, e.deltaY)); zoomBy(Math.exp(-d * 0.0016), e.clientX - r.left, e.clientY - r.top); };
 
   /* ---------- relatie-helpers ---------- */
   /* relationship engine — pure logic lives in ./relationships.js; these thin wrappers
@@ -389,8 +389,9 @@ export default function MyFam() {
 
       {/* ---------- canvas ---------- */}
       <div ref={containerRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onWheel={onWheel}
-        style={{ position: "relative", flex: 1, overflow: "hidden", cursor: nodeDrag.current.active ? "grabbing" : "grab", background: `radial-gradient(130% 130% at 50% 30%, ${T.ground} 0%, ${T.groundDeep} 100%)`, touchAction: "none" }}>
-        <div style={{ position: "absolute", inset: 0, opacity: 0.6, pointerEvents: "none", backgroundImage: `radial-gradient(circle at 22% 18%, rgba(63,185,133,0.10), transparent 42%), radial-gradient(circle at 82% 72%, rgba(232,178,76,0.08), transparent 46%)` }} />
+        style={{ position: "relative", flex: 1, overflow: "hidden", cursor: nodeDrag.current.active ? "grabbing" : "grab", background: `radial-gradient(130% 130% at 50% 30%, #1A1E1C 0%, #111413 100%)`, touchAction: "none" }}>
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(rgba(234,242,237,0.07) 1px, transparent 1px)`, backgroundSize: "22px 22px" }} />
+        <div style={{ position: "absolute", inset: 0, opacity: 0.5, pointerEvents: "none", backgroundImage: `radial-gradient(circle at 22% 18%, rgba(63,185,133,0.07), transparent 42%), radial-gradient(circle at 82% 72%, rgba(232,178,76,0.06), transparent 46%)` }} />
 
         {mode === "2d" && <>
         <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
