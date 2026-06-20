@@ -318,9 +318,12 @@ There's a fork in the road, and the right first steps are the same on both paths
 - [x] Dispose Three.js geometries/materials/textures on unmount in both 3D views — stops the GPU leak.
 - [x] Replace the `id === 1` coupling with a `meId` in state.
 
+**Done since — verified live in the running app:**
+- [x] Route the remaining hardcoded Dutch UI strings (age units, "you", connector label, drag-to-connect preview) through i18n across all 7 languages.
+- [x] Build each Three.js scene **once**; rebuild only the content group on data change so the camera is no longer reset (both 4D and globe). Confirmed: adding a relative while in 4D updates the scene in place without a camera jump.
+- [x] Verify build & run: `npm install && npm run build` pass; app runs at `localhost:5173`; persistence, `meId`, i18n, and both 3D views confirmed via the browser preview.
+
 **Still open:**
-- [ ] Build each Three.js scene **once** and update it incrementally. The leak is fixed, but the scene still tears down and **resets the camera** on every data change (deps `[persons, parentOf, spouse, sibling, meId]`).
 - [ ] Add pinch-to-zoom on the 2D canvas.
 - [ ] Extract + unit-test `relationship`, `bfsPath`, `nameMatch` (needs a test runner).
-- [ ] **Verify the build:** no Node toolchain was available in the setup environment, so `npm install && npm run build` has **not** been run. Do this before relying on the changes.
 ```
