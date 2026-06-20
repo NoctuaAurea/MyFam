@@ -43,6 +43,8 @@ const EN = {
   rel_same: "the same person", rel_partners: "partners / spouses", rel_siblings: "siblings",
   rel_uncle: "uncle/aunt and nephew/niece", rel_cousins1: "first cousins", rel_cousinsDeg: "related — cousins, degree {n}",
   rel_none: "no blood relation — connected through the network",
+  ageShort: "{n} yr", ageLong: "{n} years", youLower: "you", connectorTodo: "to complete",
+  dragParentOf: "↑ parent of {name}", dragChildOf: "↓ child of {name}", dragPartnerOf: "↔ partner of {name}",
 };
 const NL = {
   tagline: "ontdek hoe je verbonden bent", connect: "Verbind", share: "Deel", centerMe: "Centreer op mij",
@@ -88,6 +90,8 @@ const NL = {
   rel_same: "dezelfde persoon", rel_partners: "partners / echtgenoten", rel_siblings: "broer / zus",
   rel_uncle: "oom/tante en neef/nicht", rel_cousins1: "neef en nicht (eerste graad)", rel_cousinsDeg: "verwant — neef/nicht in graad {n}",
   rel_none: "geen bloedverwantschap — verbonden via het netwerk",
+  ageShort: "{n} jr", ageLong: "{n} jaar", youLower: "jij", connectorTodo: "aanvullen",
+  dragParentOf: "↑ ouder van {name}", dragChildOf: "↓ kind van {name}", dragPartnerOf: "↔ partner van {name}",
 };
 const DE = {
   tagline: "entdecke, wie ihr verbunden seid", connect: "Verbinden", share: "Teilen", centerMe: "Auf mich zentrieren",
@@ -124,6 +128,8 @@ const DE = {
   rel_same: "dieselbe Person", rel_partners: "Partner / Ehepartner", rel_siblings: "Geschwister",
   rel_uncle: "Onkel/Tante und Neffe/Nichte", rel_cousins1: "Cousins ersten Grades", rel_cousinsDeg: "verwandt — Cousins, Grad {n}",
   rel_none: "keine Blutsverwandtschaft — über das Netzwerk verbunden",
+  ageShort: "{n} J.", ageLong: "{n} Jahre", youLower: "du", connectorTodo: "ergänzen",
+  dragParentOf: "↑ Elternteil von {name}", dragChildOf: "↓ Kind von {name}", dragPartnerOf: "↔ Partner von {name}",
 };
 const FR = {
   tagline: "découvrez comment vous êtes liés", connect: "Connecter", share: "Partager", centerMe: "Me centrer",
@@ -160,6 +166,8 @@ const FR = {
   rel_same: "la même personne", rel_partners: "partenaires / époux", rel_siblings: "frère / sœur",
   rel_uncle: "oncle/tante et neveu/nièce", rel_cousins1: "cousins germains", rel_cousinsDeg: "lié — cousins, degré {n}",
   rel_none: "aucun lien de sang — relié via le réseau",
+  ageShort: "{n} ans", ageLong: "{n} ans", youLower: "toi", connectorTodo: "à compléter",
+  dragParentOf: "↑ parent de {name}", dragChildOf: "↓ enfant de {name}", dragPartnerOf: "↔ partenaire de {name}",
 };
 const ES = {
   tagline: "descubre cómo estáis conectados", connect: "Conectar", share: "Compartir", centerMe: "Centrar en mí",
@@ -196,6 +204,8 @@ const ES = {
   rel_same: "la misma persona", rel_partners: "parejas / cónyuges", rel_siblings: "hermano / hermana",
   rel_uncle: "tío/tía y sobrino/a", rel_cousins1: "primos hermanos", rel_cousinsDeg: "emparentados — primos, grado {n}",
   rel_none: "sin parentesco de sangre — conectados por la red",
+  ageShort: "{n} años", ageLong: "{n} años", youLower: "tú", connectorTodo: "completar",
+  dragParentOf: "↑ padre/madre de {name}", dragChildOf: "↓ hijo/a de {name}", dragPartnerOf: "↔ pareja de {name}",
 };
 const TR = {
   tagline: "nasıl bağlı olduğunuzu keşfedin", connect: "Bağlan", share: "Paylaş", centerMe: "Beni ortala",
@@ -232,6 +242,8 @@ const TR = {
   rel_same: "aynı kişi", rel_partners: "partnerler / eşler", rel_siblings: "kardeşler",
   rel_uncle: "amca/teyze ve yeğen", rel_cousins1: "birinci derece kuzenler", rel_cousinsDeg: "akraba — kuzenler, derece {n}",
   rel_none: "kan bağı yok — ağ üzerinden bağlı",
+  ageShort: "{n} yaş", ageLong: "{n} yaşında", youLower: "sen", connectorTodo: "tamamla",
+  dragParentOf: "↑ {name} ebeveyni", dragChildOf: "↓ {name} çocuğu", dragPartnerOf: "↔ {name} partneri",
 };
 const AR = {
   tagline: "اكتشف كيف ترتبطون", connect: "اتصال", share: "مشاركة", centerMe: "توسيطي",
@@ -268,6 +280,8 @@ const AR = {
   rel_same: "الشخص نفسه", rel_partners: "شريكان / زوجان", rel_siblings: "شقيق / شقيقة",
   rel_uncle: "عم/خال وابن/بنت الأخ", rel_cousins1: "أبناء عمومة (الدرجة الأولى)", rel_cousinsDeg: "أقارب — أبناء عمومة، الدرجة {n}",
   rel_none: "لا قرابة دم — مرتبطان عبر الشبكة",
+  ageShort: "{n} سنة", ageLong: "{n} سنة", youLower: "أنت", connectorTodo: "إكمال",
+  dragParentOf: "↑ والد {name}", dragChildOf: "↓ ابن {name}", dragPartnerOf: "↔ شريك {name}",
 };
 const STRINGS = { en: EN, nl: NL, de: DE, fr: FR, es: ES, tr: TR, ar: AR };
 export const LANGS = [["en", "English"], ["nl", "Nederlands"], ["de", "Deutsch"], ["fr", "Français"], ["es", "Español"], ["tr", "Türkçe"], ["ar", "العربية"]];

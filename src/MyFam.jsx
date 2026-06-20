@@ -198,10 +198,10 @@ export default function MyFam() {
     else if (kind === "kind") pe.push({ p: anchor.id, c: target.id });
     else if (kind === "partner") se.push({ a: anchor.id, b: target.id });
     else if (kind === "broer/zus") { parents(anchor.id).forEach((p) => pe.push({ p, c: target.id })); sb.push({ a: anchor.id, b: target.id }); }
-    else if (kind === "grootouder") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn("Ouder", "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } pe.push({ p: target.id, c: p0 }); }
-    else if (kind === "oom/tante") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn("Ouder", "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); gps.forEach((g) => pe.push({ p: g, c: target.id })); sb.push({ a: p0, b: target.id }); }
-    else if (kind === "neef/nicht") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn("Ouder", "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); let uncle = gps.length ? parentOf.filter((e) => gps.includes(e.p) && e.c !== p0).map((e) => e.c)[0] : null; if (!uncle) { const uc = mkConn("Oom/tante", "oom/tante"); gps.forEach((g) => pe.push({ p: g, c: uc.id })); if (!gps.length) sb.push({ a: p0, b: uc.id }); uncle = uc.id; } pe.push({ p: uncle, c: target.id }); }
-    else if (kind === "kleinkind") { let c0 = childrenOf(anchor.id)[0]; if (!c0) { const c = mkConn("Kind", "kind"); pe.push({ p: anchor.id, c: c.id }); c0 = c.id; } pe.push({ p: c0, c: target.id }); }
+    else if (kind === "grootouder") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn(t("kind_ouder"), "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } pe.push({ p: target.id, c: p0 }); }
+    else if (kind === "oom/tante") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn(t("kind_ouder"), "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); gps.forEach((g) => pe.push({ p: g, c: target.id })); sb.push({ a: p0, b: target.id }); }
+    else if (kind === "neef/nicht") { let p0 = parents(anchor.id)[0]; if (!p0) { const c = mkConn(t("kind_ouder"), "ouder"); pe.push({ p: c.id, c: anchor.id }); p0 = c.id; } const gps = parentOf.filter((e) => e.c === p0).map((e) => e.p); let uncle = gps.length ? parentOf.filter((e) => gps.includes(e.p) && e.c !== p0).map((e) => e.c)[0] : null; if (!uncle) { const uc = mkConn(t("kind_oom/tante"), "oom/tante"); gps.forEach((g) => pe.push({ p: g, c: uc.id })); if (!gps.length) sb.push({ a: p0, b: uc.id }); uncle = uc.id; } pe.push({ p: uncle, c: target.id }); }
+    else if (kind === "kleinkind") { let c0 = childrenOf(anchor.id)[0]; if (!c0) { const c = mkConn(t("kind_kind"), "kind"); pe.push({ p: anchor.id, c: c.id }); c0 = c.id; } pe.push({ p: c0, c: target.id }); }
     if (np.length) setPersons((ps) => [...ps, ...np]);
     if (pe.length) setParentOf((e) => [...e, ...pe]);
     if (se.length) setSpouse((e) => [...e, ...se]);
@@ -360,7 +360,7 @@ export default function MyFam() {
 
           {dragPreview && prevFrom && (
             <div style={{ position: "absolute", left: prevFrom.cx, top: prevFrom.cy - 58, transform: "translate(-50%,-50%)", background: T.gold, color: "#06140F", padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", pointerEvents: "none", boxShadow: "0 4px 14px rgba(0,0,0,0.4)" }}>
-              {dragPreview.relation === "ouder" ? "↑ ouder van " : dragPreview.relation === "kind" ? "↓ kind van " : "↔ partner van "}{prevTo.first}
+              {dragPreview.relation === "ouder" ? t("dragParentOf", { name: prevTo.first }) : dragPreview.relation === "kind" ? t("dragChildOf", { name: prevTo.first }) : t("dragPartnerOf", { name: prevTo.first })}
             </div>
           )}
         </div>
@@ -680,7 +680,7 @@ function Node({ p, index, revealed, selected, hot, dragging, onDragStart }) {
       <div onPointerDown={(e) => onDragStart(p.id, e)} style={{ ...common, textAlign: "center", ...popStyle }}>
         <div style={{ width: 96, height: 96, borderRadius: "50%", margin: "0 auto", background: `radial-gradient(circle at 35% 30%, #F6D690, ${T.gold})`, display: "grid", placeItems: "center", color: T.groundDeep, fontFamily: serif, fontWeight: 600, fontSize: 30, boxShadow: `0 0 0 4px rgba(232,178,76,0.22), 0 0 40px rgba(232,178,76,0.55)`, outline: selected ? "3px solid #fff" : "none", outlineOffset: 3 }}>{initials(p)}</div>
         <div style={{ marginTop: 8, color: T.text, fontFamily: serif, fontWeight: 600, fontSize: 15 }}>{fullName(p)}</div>
-        <div style={{ color: T.textSoft, fontSize: 11.5, fontFamily: mono }}>jij · {p.city}</div>
+        <div style={{ color: T.textSoft, fontSize: 11.5, fontFamily: mono }}>{t("youLower")} · {p.city}</div>
       </div>
     );
   }
@@ -689,7 +689,7 @@ function Node({ p, index, revealed, selected, hot, dragging, onDragStart }) {
       <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, background: p.connector ? T.textSoft : colorFor(p), color: "#0A1512", display: "grid", placeItems: "center", fontFamily: serif, fontWeight: 600, fontSize: 15 }}>{p.connector ? "?" : initials(p)}</div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontFamily: serif, fontWeight: 600, fontSize: 14, color: T.text, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontStyle: p.connector ? "italic" : "normal" }}>{p.connector ? p.first : fullName(p)}</div>
-        <div style={{ fontSize: 11, color: T.textSoft, fontFamily: mono }}>{p.connector ? "aanvullen" : `${age != null ? `${age} jr` : "—"} · ${p.city}`}</div>
+        <div style={{ fontSize: 11, color: T.textSoft, fontFamily: mono }}>{p.connector ? t("connectorTodo") : `${age != null ? t("ageShort", { n: age }) : "—"} · ${p.city}`}</div>
       </div>
     </div>
   );
@@ -716,7 +716,7 @@ function DetailCard({ p, isMe, onAdd, onClose, onVerify }) {
       </div>
       <div style={{ height: 1, background: T.border, margin: "14px 0" }} />
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-        <Field icon={<Calendar size={15} />} value={p.birth ? `${p.birth}${age != null ? `  ·  ${age} jaar` : ""}` : null} />
+        <Field icon={<Calendar size={15} />} value={p.birth ? `${p.birth}${age != null ? `  ·  ${t("ageLong", { n: age })}` : ""}` : null} />
         <Field icon={<MapPin size={15} />} value={p.city} />
         <Field icon={<Baby size={15} />} value={p.birthCity ? t("bornIn", { city: p.birthCity }) : null} />
         <Field icon={<Mail size={15} />} value={p.email} />
@@ -858,7 +858,7 @@ function Toast({ toast, onClose }) {
       <div style={{ marginTop: 10, background: T.surfaceUp, border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, fontSize: 13, lineHeight: 1.55, color: T.text }}>
         <div style={{ fontFamily: serif, fontWeight: 600, fontSize: 15, marginBottom: 6 }}>{t("inviteHead")}</div>
         {t("inviteBy", { inviter: fullName(inv), kind: t("kind_" + toast.kind) })}
-        <div style={{ marginTop: 8, padding: "8px 10px", background: "rgba(232,178,76,0.10)", borderRadius: 8, fontFamily: mono, fontSize: 12 }}>{fullName(p)}{age != null ? ` · ${age} jr` : ""}{p.city ? ` · ${p.city}` : ""}</div>
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "rgba(232,178,76,0.10)", borderRadius: 8, fontFamily: mono, fontSize: 12 }}>{fullName(p)}{age != null ? ` · ${t("ageShort", { n: age })}` : ""}{p.city ? ` · ${p.city}` : ""}</div>
         <div style={{ marginTop: 8, color: T.textSoft }}>{t("inviteRecognize")}</div>
         <div style={{ display: "inline-block", marginTop: 10, background: T.green, color: "#06140F", padding: "7px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600 }}>{t("inviteCta")}</div>
       </div></>);
