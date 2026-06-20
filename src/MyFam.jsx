@@ -98,6 +98,8 @@ export default function MyFam() {
   const containerRef = useRef(null);
   const panDrag = useRef({ active: false });
   const nodeDrag = useRef({ active: false });
+  const pointers = useRef(new Map()); // active pointers on the 2D canvas (for pinch-zoom)
+  const pinch = useRef(null);         // { dist, mid } while two fingers are down
   const viewRef = useRef(view); useEffect(() => { viewRef.current = view; }, [view]);
   const personsRef = useRef(persons); useEffect(() => { personsRef.current = persons; }, [persons]);
 
@@ -197,8 +199,29 @@ export default function MyFam() {
     const dy = ny - best.o.cy; const relation = dy < -55 ? "ouder" : dy > 55 ? "kind" : "partner";
     setDragPreview({ fromId: id, toId: best.o.id, relation });
   };
-  const onPointerDown = (e) => { if (mode !== "2d") return; panDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: viewRef.current.x, oy: viewRef.current.y, moved: false }; };
+  const onPointerDown = (e) => {
+    if (mode !== "2d") return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) { // second finger → begin pinch; cancel pan/node-drag
+      const [a, b] = [...pointers.current.values()]; const r = containerRef.current.getBoundingClientRect();
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top } };
+      panDrag.current = { active: false }; nodeDrag.current = { active: false }; setDragPreview(null);
+      return;
+    }
+    panDrag.current = { active: true, sx: e.clientX, sy: e.clientY, ox: viewRef.current.x, oy: viewRef.current.y, moved: false };
+  };
   const onPointerMove = (e) => {
+    if (pinch.current) {
+      if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current.size >= 2) {
+        const [a, b] = [...pointers.current.values()]; const r = containerRef.current.getBoundingClientRect();
+        const dist = Math.hypot(a.x - b.x, a.y - b.y); const mid = { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top };
+        const prev = pinch.current; const factor = prev.dist ? dist / prev.dist : 1;
+        setView((v) => { const nk = Math.min(2.4, Math.max(0.3, v.k * factor)); const wx = (mid.x - v.x) / v.k, wy = (mid.y - v.y) / v.k; return { k: nk, x: mid.x - wx * nk + (mid.x - prev.mid.x), y: mid.y - wy * nk + (mid.y - prev.mid.y) }; });
+        pinch.current = { dist, mid };
+      }
+      return;
+    }
     if (nodeDrag.current.active) {
       const nd = nodeDrag.current; const w = screenToWorld(e.clientX, e.clientY); const nx = w.x - nd.offX, ny = w.y - nd.offY;
       if (Math.hypot(e.clientX - nd.sx, e.clientY - nd.sy) > 4) nd.moved = true;
@@ -210,6 +233,8 @@ export default function MyFam() {
     }
   };
   const onPointerUp = (e) => {
+    pointers.current.delete(e.pointerId);
+    if (pinch.current) { if (pointers.current.size < 2) { pinch.current = null; panDrag.current = { active: false }; } return; }
     if (nodeDrag.current.active) {
       const nd = nodeDrag.current;
       if (nd.moved && dragPreview) {
