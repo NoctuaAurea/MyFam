@@ -1,6 +1,6 @@
 /* MyFam — internationalisatie. Detecteert apparaat-taal; valt terug op Engels. */
 const EN = {
-  tagline: "discover how you're connected", connect: "Connect", share: "Share", centerMe: "Center on me", arrange: "Tidy layout",
+  tagline: "discover how you're connected", connect: "Connect", share: "Share", centerMe: "Center on me", arrange: "Tidy layout", cleanup: "Clean up",
   relations: "relations", relationsTitle: "total family connections", mapTitle: "Globe",
   hint_add: "tap the field to add someone", hint_drag: "drag a card onto family to connect",
   youAre: "THIS IS YOU", fbVerifiedTitle: "Verified via Facebook", bornIn: "born in {city}",
@@ -47,7 +47,7 @@ const EN = {
   dragParentOf: "↑ parent of {name}", dragChildOf: "↓ child of {name}", dragPartnerOf: "↔ partner of {name}",
 };
 const NL = {
-  tagline: "ontdek hoe je verbonden bent", connect: "Verbind", share: "Deel", centerMe: "Centreer op mij", arrange: "Stamboom ordenen",
+  tagline: "ontdek hoe je verbonden bent", connect: "Verbind", share: "Deel", centerMe: "Centreer op mij", arrange: "Stamboom ordenen", cleanup: "Opruimen",
   relations: "relaties", relationsTitle: "totaal aantal familiebanden", mapTitle: "Wereldbol",
   hint_add: "klik op het veld om iemand toe te voegen", hint_drag: "sleep een kaartje naar familie om te verbinden",
   youAre: "DIT BEN JIJ", fbVerifiedTitle: "Geverifieerd via Facebook", bornIn: "geboren in {city}",
@@ -94,7 +94,7 @@ const NL = {
   dragParentOf: "↑ ouder van {name}", dragChildOf: "↓ kind van {name}", dragPartnerOf: "↔ partner van {name}",
 };
 const DE = {
-  tagline: "entdecke, wie ihr verbunden seid", connect: "Verbinden", share: "Teilen", centerMe: "Auf mich zentrieren", arrange: "Aufräumen",
+  tagline: "entdecke, wie ihr verbunden seid", connect: "Verbinden", share: "Teilen", centerMe: "Auf mich zentrieren", arrange: "Aufräumen", cleanup: "Aufräumen",
   relations: "Beziehungen", relationsTitle: "gesamte Familienbande", mapTitle: "Globus",
   hint_add: "tippe ins Feld, um jemanden hinzuzufügen", hint_drag: "ziehe eine Karte auf Familie, um zu verbinden",
   youAre: "DAS BIST DU", fbVerifiedTitle: "Über Facebook verifiziert", bornIn: "geboren in {city}",
@@ -132,7 +132,7 @@ const DE = {
   dragParentOf: "↑ Elternteil von {name}", dragChildOf: "↓ Kind von {name}", dragPartnerOf: "↔ Partner von {name}",
 };
 const FR = {
-  tagline: "découvrez comment vous êtes liés", connect: "Connecter", share: "Partager", centerMe: "Me centrer", arrange: "Réorganiser",
+  tagline: "découvrez comment vous êtes liés", connect: "Connecter", share: "Partager", centerMe: "Me centrer", arrange: "Réorganiser", cleanup: "Nettoyer",
   relations: "relations", relationsTitle: "total des liens familiaux", mapTitle: "Globe",
   hint_add: "touchez le champ pour ajouter quelqu'un", hint_drag: "glissez une carte sur la famille pour relier",
   youAre: "C'EST VOUS", fbVerifiedTitle: "Vérifié via Facebook", bornIn: "né(e) à {city}",
@@ -170,7 +170,7 @@ const FR = {
   dragParentOf: "↑ parent de {name}", dragChildOf: "↓ enfant de {name}", dragPartnerOf: "↔ partenaire de {name}",
 };
 const ES = {
-  tagline: "descubre cómo estáis conectados", connect: "Conectar", share: "Compartir", centerMe: "Centrar en mí", arrange: "Ordenar",
+  tagline: "descubre cómo estáis conectados", connect: "Conectar", share: "Compartir", centerMe: "Centrar en mí", arrange: "Ordenar", cleanup: "Ordenar",
   relations: "relaciones", relationsTitle: "total de lazos familiares", mapTitle: "Globo",
   hint_add: "toca el campo para añadir a alguien", hint_drag: "arrastra una tarjeta a un familiar para conectar",
   youAre: "ESTE ERES TÚ", fbVerifiedTitle: "Verificado vía Facebook", bornIn: "nacido en {city}",
@@ -208,7 +208,7 @@ const ES = {
   dragParentOf: "↑ padre/madre de {name}", dragChildOf: "↓ hijo/a de {name}", dragPartnerOf: "↔ pareja de {name}",
 };
 const TR = {
-  tagline: "nasıl bağlı olduğunuzu keşfedin", connect: "Bağlan", share: "Paylaş", centerMe: "Beni ortala", arrange: "Düzenle",
+  tagline: "nasıl bağlı olduğunuzu keşfedin", connect: "Bağlan", share: "Paylaş", centerMe: "Beni ortala", arrange: "Düzenle", cleanup: "Düzenle",
   relations: "ilişkiler", relationsTitle: "toplam aile bağı", mapTitle: "Küre",
   hint_add: "birini eklemek için alana dokun", hint_drag: "bağlamak için kartı aileye sürükle",
   youAre: "BU SENSİN", fbVerifiedTitle: "Facebook ile doğrulandı", bornIn: "{city} doğumlu",
@@ -246,7 +246,7 @@ const TR = {
   dragParentOf: "↑ {name} ebeveyni", dragChildOf: "↓ {name} çocuğu", dragPartnerOf: "↔ {name} partneri",
 };
 const AR = {
-  tagline: "اكتشف كيف ترتبطون", connect: "اتصال", share: "مشاركة", centerMe: "توسيطي", arrange: "ترتيب",
+  tagline: "اكتشف كيف ترتبطون", connect: "اتصال", share: "مشاركة", centerMe: "توسيطي", arrange: "ترتيب", cleanup: "تنظيف",
   relations: "علاقات", relationsTitle: "إجمالي الروابط العائلية", mapTitle: "الكرة الأرضية",
   hint_add: "انقر على الحقل لإضافة شخص", hint_drag: "اسحب بطاقة نحو العائلة للربط",
   youAre: "هذا أنت", fbVerifiedTitle: "موثّق عبر فيسبوك", bornIn: "وُلد في {city}",

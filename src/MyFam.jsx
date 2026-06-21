@@ -605,6 +605,12 @@ export default function MyFam() {
           </div>
         )}
 
+        {/* clean-up: re-run the tidy generational layout (n8n-style) */}
+        <button onClick={arrange} title={t("cleanup")}
+          style={{ position: "absolute", bottom: 18, right: 18, display: "flex", alignItems: "center", gap: 8, background: T.surfaceUp, color: T.text, border: `1px solid ${T.border}`, borderRadius: 999, padding: "9px 16px", fontSize: 13, fontWeight: 600, fontFamily: sans, cursor: "pointer", backdropFilter: "blur(6px)", boxShadow: "0 6px 18px rgba(0,0,0,0.4)" }}>
+          <Sparkles size={16} color={T.gold} /> {t("cleanup")}
+        </button>
+
         </>}
         {mode === "4d" && <ErrorBoundary fallback={viewFallback}><ThreeView persons={persons} parentOf={parentOf} spouse={spouse} sibling={sibling} youId={meId} onSelect={(id) => { setSelectedId(id); setHighlight(new Set()); }} /></ErrorBoundary>}
         {mode === "map" && <ErrorBoundary fallback={viewFallback}><GlobeView persons={persons} parentOf={parentOf} spouse={spouse} sibling={sibling} youId={meId} onSelect={(id) => { setSelectedId(id); setHighlight(new Set()); }} /></ErrorBoundary>}
