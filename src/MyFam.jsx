@@ -5,6 +5,7 @@ import {
   Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid, Pencil, Trash2, Heart, ArrowUp, ArrowDown,
 } from "lucide-react";
 import * as THREE from "three";
+import { QRCodeSVG } from "qrcode.react";
 import WORLD_BORDERS from "./worldBorders.js";
 import { t, setLang, getLang, isRTL, LANGS } from "./i18n.js";
 import { loadState, saveState } from "./storage.js";
@@ -1160,12 +1161,18 @@ function ConnectPanel({ onClose, onConnect }) {
 }
 
 function SharePanel({ me, onClose }) {
-  const link = `https://myfam.app/u/${me.username}`;
+  const link = me?.username ? `https://myfam.today/u/${me.username}` : "https://myfam.today";
   const text = encodeURIComponent(t("shareText", { link }));
   const [copied, setCopied] = useState(false);
   return (
     <Modal title={t("shareTitle")} onClose={onClose}>
       <p style={{ fontSize: 13.5, color: T.textSoft, marginTop: 0 }}>{t("shareDesc")}</p>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, margin: "16px 0" }}>
+        <div style={{ background: "#fff", padding: 12, borderRadius: 14, lineHeight: 0, boxShadow: "0 8px 22px rgba(0,0,0,0.4)" }}>
+          <QRCodeSVG value={link} size={168} level="M" bgColor="#ffffff" fgColor="#0A1512" />
+        </div>
+        <span style={{ fontSize: 11.5, color: T.textSoft, fontFamily: mono }}>{t("qrScanToVisit")}</span>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, background: T.surfaceUp, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 12px", margin: "12px 0" }}>
         <Link2 size={16} color={T.textSoft} /><span style={{ flex: 1, fontFamily: mono, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>{link}</span>
         <button onClick={() => { navigator.clipboard?.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); }} style={{ border: "none", background: T.green, color: "#06140F", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{copied ? t("copied") : t("copy")}</button>
