@@ -5,3 +5,6 @@ archive
 .claude/
 .env.local
 .env*.local
+
+# Local Netlify folder
+.netlify
