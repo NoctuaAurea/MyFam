@@ -8,3 +8,4 @@ archive
 
 # Local Netlify folder
 .netlify
+demo-video/*.mp4

@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   Plus, X, Search, Share2, QrCode, MapPin, Calendar, Mail, Phone,
   Instagram, MessageCircle, Crosshair, ZoomIn, ZoomOut, UserPlus,
-  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid, Pencil, Trash2, Heart, ArrowUp, ArrowDown,
+  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid, Pencil, Trash2, Heart, ArrowUp, ArrowDown, Loader2,
 } from "lucide-react";
 import * as THREE from "three";
 import { QRCodeSVG } from "qrcode.react";
 import WORLD_BORDERS from "./worldBorders.js";
 import { t, setLang, getLang, isRTL, LANGS } from "./i18n.js";
 import { loadState, saveState } from "./storage.js";
+import { enrichPerson } from "./cala.js";
 import ErrorBoundary from "./ErrorBoundary.jsx";
 import * as rel from "./relationships.js";
 import { useAuth } from "./auth.jsx";
@@ -43,6 +44,7 @@ const CSS = `
 @keyframes vw-fade { from{opacity:0;} to{opacity:1;} }
 @keyframes vw-leaf { 0%{opacity:0; transform:scale(0);} 100%{opacity:1; transform:scale(1);} }
 @keyframes vw-pulse { 0%,100%{transform:scale(1); opacity:.9;} 50%{transform:scale(1.18); opacity:1;} }
+@keyframes spin { to { transform: rotate(360deg); } }
 `;
 
 /* Fuzzy name matching + the relationship/kinship engine now live in ./relationships.js
@@ -55,16 +57,16 @@ const colorFor = (p) => p.isYou ? T.gold : ["#4FA3C7", "#C79A4F", "#C77FA8", "#6
 
 /* ---------- seed-familie ---------- */
 const seedPersonsRaw = [
-  { id: 1, isYou: true, first: "Yara", last: "Hussein", birth: "1994-03-12", city: "Amsterdam", birthCity: "Caïro", email: "yara@myfam.app", username: "yara", insta: "yara.h", fb: "yara.hussein", gender: "v", cx: 0, cy: 0 },
-  { id: 2, first: "Ahmed", last: "Hussein", birth: "1965-07-02", city: "Caïro", birthCity: "Alexandrië", email: "ahmed@mail.com", username: "ahmed", gender: "m", cx: -210, cy: -210 },
-  { id: 3, first: "Layla", last: "Mansour", birth: "1968-11-21", city: "Caïro", username: "layla", gender: "v", cx: 210, cy: -210 },
-  { id: 4, first: "Omar", last: "Hussein", birth: "1991-01-30", city: "Rotterdam", birthCity: "Caïro", username: "omar", gender: "m", cx: -300, cy: 20 },
-  { id: 5, first: "Kamal", last: "Hussein", birth: "1938-05-09", city: "Alexandrië", username: "kamal", gender: "m", cx: -360, cy: -420 },
-  { id: 6, first: "Fatima", last: "Saleh", birth: "1942-09-14", city: "Alexandrië", username: "fatima", gender: "v", cx: -150, cy: -420 },
-  { id: 7, first: "Tarek", last: "Hussein", birth: "1962-02-18", city: "Caïro", username: "tarek", gender: "m", cx: -620, cy: -210 },
-  { id: 8, first: "Mohammed", last: "Hussein", birth: "1990-06-25", city: "Dubai", birthCity: "Caïro", username: "mohammed", insta: "mo.hussein", fb: "mohammed.hussein.92", gender: "m", cx: -680, cy: 20 },
-  { id: 9, first: "Youssef", last: "Adel", birth: "1992-08-08", city: "Amsterdam", username: "youssef", gender: "m", cx: 200, cy: 20 },
-  { id: 10, first: "Sara", last: "Adel", birth: "2020-04-17", city: "Amsterdam", birthCity: "Amsterdam", username: "sara", gender: "v", cx: 60, cy: 240 },
+  { id: 1, isYou: true, first: "Sophie", last: "de Vries", birth: "1994-03-12", city: "Amsterdam", birthCity: "Utrecht", email: "sophie@myfam.app", username: "sophie", insta: "sophie.devries", fb: "sophie.devries", linkedin: "sophie-de-vries", gender: "v", cx: 0, cy: 0 },
+  { id: 2, first: "Thomas", last: "de Vries", birth: "1965-07-02", city: "Sydney", birthCity: "Eindhoven", email: "thomas@mail.com", username: "thomas", linkedin: "thomas-de-vries", gender: "m", cx: -210, cy: -210 },
+  { id: 3, first: "Claire", last: "Janssen", birth: "1968-11-21", city: "Sydney", username: "claire", gender: "v", cx: 210, cy: -210 },
+  { id: 4, first: "Lucas", last: "de Vries", birth: "1991-01-30", city: "New York", birthCity: "Utrecht", username: "lucas", insta: "lucas.devries", linkedin: "lucas-de-vries", gender: "m", cx: -300, cy: 20 },
+  { id: 5, first: "Hendrik", last: "de Vries", birth: "1938-05-09", city: "Rotterdam", username: "hendrik", gender: "m", cx: -360, cy: -420 },
+  { id: 6, first: "Anna", last: "Bakker", birth: "1942-09-14", city: "Rotterdam", username: "anna", gender: "v", cx: -150, cy: -420 },
+  { id: 7, first: "Peter", last: "de Vries", birth: "1962-02-18", city: "Toronto", birthCity: "Utrecht", username: "peter", linkedin: "peter-de-vries", gender: "m", cx: -620, cy: -210 },
+  { id: 8, first: "Max", last: "de Vries", birth: "1990-06-25", city: "Tokyo", birthCity: "Utrecht", username: "max", insta: "max.devries", fb: "max.devries.90", linkedin: "max-de-vries", gender: "m", cx: -680, cy: 20 },
+  { id: 9, first: "Oliver", last: "Berg", birth: "1992-08-08", city: "Amsterdam", username: "oliver", linkedin: "oliver-berg", gender: "m", cx: 200, cy: 20 },
+  { id: 10, first: "Emma", last: "Berg", birth: "2020-04-17", city: "Amsterdam", birthCity: "Amsterdam", username: "emma", gender: "v", cx: 60, cy: 240 },
 ];
 const seedParent = [
   { p: 2, c: 1 }, { p: 3, c: 1 }, { p: 2, c: 4 }, { p: 3, c: 4 },
@@ -201,7 +203,7 @@ export default function MyFam() {
   const pushMutation = async (np, pe, se, sb) => {
     const ids = new Set(np.map((p) => p.id)); const ref = (id) => (ids.has(id) ? `t${id}` : id);
     const tree = await api.mutate({
-      newPersons: np.map((p) => ({ tmp: `t${p.id}`, first: p.first, last: p.last, birth: p.birth, city: p.city, birthCity: p.birthCity, email: p.email, insta: p.insta, fb: p.fb, gender: p.gender, cx: p.cx, cy: p.cy })),
+      newPersons: np.map((p) => ({ tmp: `t${p.id}`, first: p.first, last: p.last, birth: p.birth, city: p.city, birthCity: p.birthCity, email: p.email, insta: p.insta, fb: p.fb, linkedin: p.linkedin, gender: p.gender, cx: p.cx, cy: p.cy })),
       parent: pe.map((e) => ({ p: ref(e.p), c: ref(e.c) })), spouse: se.map((e) => ({ a: ref(e.a), b: ref(e.b) })), sibling: sb.map((e) => ({ a: ref(e.a), b: ref(e.b) })),
     });
     applyTree(tree);
@@ -308,7 +310,7 @@ export default function MyFam() {
   const GEN_DY = { grootouder: -460, ouder: -230, "oom/tante": -230, "broer/zus": 0, partner: 0, "neef/nicht": 0, kind: 230, kleinkind: 460 };
   const SIDE_DX = { grootouder: -60, ouder: 60, "oom/tante": -320, "broer/zus": 220, partner: 190, "neef/nicht": -320, kind: 60, kleinkind: 60 };
   const placeNear = (anchor, kind, list) => { let cx = anchor.cx + (SIDE_DX[kind] ?? 60), cy = anchor.cy + (GEN_DY[kind] ?? 0); while (list.some((p) => Math.abs(p.cx - cx) < 160 && Math.abs(p.cy - cy) < 95)) cx += 175; return { cx, cy }; };
-  const newPersonFromForm = (form, cx, cy, nextId) => ({ id: nextId, first: form.first.trim(), last: form.last.trim(), birth: form.birth, city: form.city, birthCity: form.birthCity, email: form.email, insta: form.insta, fb: form.fb, gender: form.gender, username: (form.first + form.last).toLowerCase().replace(/[^a-z]/g, ""), cx, cy });
+  const newPersonFromForm = (form, cx, cy, nextId) => ({ id: nextId, first: form.first.trim(), last: form.last.trim(), birth: form.birth, city: form.city, birthCity: form.birthCity, email: form.email, insta: form.insta, fb: form.fb, linkedin: form.linkedin, gender: form.gender, username: (form.first + form.last).toLowerCase().replace(/[^a-z]/g, ""), cx, cy });
 
   const addMember = (form, existing) => {
     const anchor = selected, kind = form.kind;
@@ -1053,6 +1055,14 @@ function Field({ icon, value, href }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: T.text }}>{inner}</div>;
 }
 
+function LinkedInIcon({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+    </svg>
+  );
+}
+
 function DetailCard({ p, isMe, title, onAdd, onClose, onVerify }) {
   const age = ageFrom(p.birth);
   return (
@@ -1075,6 +1085,7 @@ function DetailCard({ p, isMe, title, onAdd, onClose, onVerify }) {
         <Field icon={<Phone size={15} />} value={p.phone} />
         <Field icon={<Instagram size={15} />} value={p.insta ? `@${p.insta}` : null} href={p.insta ? `https://instagram.com/${p.insta}` : null} />
         <Field icon={<Facebook size={15} />} value={p.fb ? `/${p.fb}` : null} href={p.fb ? `https://facebook.com/${p.fb}` : null} />
+        <Field icon={<LinkedInIcon size={15} />} value={p.linkedin ? `in/${p.linkedin}` : null} href={p.linkedin ? `https://linkedin.com/in/${p.linkedin}` : null} />
       </div>
       {p.fb && !p.fbVerified && <button onClick={() => onVerify(p.id)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", marginTop: 14, padding: "9px 12px", background: "#1877F2", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: sans }}><Facebook size={16} /> {t("verifyFb")}</button>}
       <button onClick={onAdd} style={{ ...pill(T.green, "#06140F"), width: "100%", justifyContent: "center", marginTop: 10 }}><UserPlus size={16} /> {t("addRelative")}</button>
@@ -1082,13 +1093,73 @@ function DetailCard({ p, isMe, title, onAdd, onClose, onVerify }) {
   );
 }
 
-function PersonFields({ f, set }) {
+function PersonFields({ f, set, setF }) {
+  const [calaState, setCalaState] = useState(null); // null | { loading } | { result } | { empty }
+
+  const canLookup = f.first.trim().length >= 2 && f.last.trim().length >= 2;
+
+  const handleCalaLookup = async () => {
+    setCalaState({ loading: true });
+    const result = await enrichPerson(f.first.trim(), f.last.trim());
+    setCalaState(result ? { result } : { empty: true });
+  };
+
+  const applyEnrichment = (enrichment) => {
+    if (!setF) return;
+    setF((prev) => ({
+      ...prev,
+      birth:     (!prev.birth     && enrichment.birth)     ? enrichment.birth     : prev.birth,
+      city:      (!prev.city      && enrichment.city)      ? enrichment.city      : prev.city,
+      birthCity: (!prev.birthCity && enrichment.birthCity) ? enrichment.birthCity : prev.birthCity,
+      email:     (!prev.email     && enrichment.email)     ? enrichment.email     : prev.email,
+    }));
+    setCalaState(null);
+  };
+
   return (
     <>
       <div style={{ display: "flex", gap: 10 }}>
-        <Input label={t("field_first")} value={f.first} onChange={set("first")} placeholder={t("ph_first")} />
-        <Input label={t("field_last")} value={f.last} onChange={set("last")} placeholder={t("ph_last")} />
+        <Input label={t("field_first")} value={f.first} onChange={(e) => { set("first")(e); setCalaState(null); }} placeholder={t("ph_first")} />
+        <Input label={t("field_last")} value={f.last} onChange={(e) => { set("last")(e); setCalaState(null); }} placeholder={t("ph_last")} />
       </div>
+
+      {/* CALA AI enrichment row */}
+      {canLookup && setF && !calaState?.result && !calaState?.loading && !calaState?.empty && (
+        <button onClick={handleCalaLookup} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "5px 11px", background: "rgba(63,185,133,0.08)", border: "1px solid rgba(63,185,133,0.25)", borderRadius: 8, color: T.green, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <Sparkles size={13} /> Enrich from CALA AI
+        </button>
+      )}
+      {calaState?.loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: T.textSoft }}>
+          <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> Looking up {f.first} {f.last}…
+        </div>
+      )}
+      {calaState?.empty && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "5px 10px", background: "rgba(255,255,255,0.03)", border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 12, color: T.textSoft }}>
+          No CALA match found for {f.first} {f.last}
+          <button onClick={() => setCalaState(null)} style={{ background: "none", border: "none", color: T.textSoft, cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+        </div>
+      )}
+      {calaState?.result && (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: "rgba(63,185,133,0.08)", border: "1px solid rgba(63,185,133,0.30)", borderRadius: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: T.green }}><Sparkles size={13} /> Found in CALA AI</span>
+            <button onClick={() => setCalaState(null)} style={{ background: "none", border: "none", color: T.textSoft, cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+          </div>
+          {calaState.result.description && (
+            <div style={{ fontSize: 11.5, color: T.textSoft, marginBottom: 8, lineHeight: 1.4 }}>{calaState.result.description.slice(0, 120)}{calaState.result.description.length > 120 ? "…" : ""}</div>
+          )}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {calaState.result.birth && <span style={{ fontSize: 11, padding: "2px 8px", background: T.surfaceUp, borderRadius: 99, color: T.text }}>📅 {calaState.result.birth}</span>}
+            {calaState.result.city  && <span style={{ fontSize: 11, padding: "2px 8px", background: T.surfaceUp, borderRadius: 99, color: T.text }}>📍 {calaState.result.city}</span>}
+            {calaState.result.email && <span style={{ fontSize: 11, padding: "2px 8px", background: T.surfaceUp, borderRadius: 99, color: T.text }}>✉️ {calaState.result.email}</span>}
+          </div>
+          <button onClick={() => applyEnrichment(calaState.result)} style={{ padding: "5px 12px", background: T.green, border: "none", borderRadius: 7, color: "#06140F", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Pre-fill empty fields
+          </button>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <Input label={t("field_birth")} type="date" value={f.birth} onChange={set("birth")} />
         <Input label={t("field_city")} value={f.city} onChange={set("city")} placeholder={t("ph_city")} />
@@ -1099,12 +1170,13 @@ function PersonFields({ f, set }) {
         <Input label={t("field_insta")} value={f.insta} onChange={set("insta")} placeholder={t("ph_username")} />
         <Input label={t("field_fb")} value={f.fb} onChange={set("fb")} placeholder={t("ph_username")} />
       </div>
+      <Input label="LinkedIn" value={f.linkedin} onChange={set("linkedin")} placeholder="username" />
     </>
   );
 }
 
 function AddPanel({ anchor, persons, onClose, onSubmit }) {
-  const [f, setF] = useState({ kind: "ouder", first: "", last: anchor.last, birth: "", city: "", birthCity: "", email: "", insta: "", fb: "", gender: "" });
+  const [f, setF] = useState({ kind: "ouder", first: "", last: anchor.last, birth: "", city: "", birthCity: "", email: "", insta: "", fb: "", linkedin: "", gender: "" });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const kinds = ["grootouder", "ouder", "oom/tante", "broer/zus", "partner", "neef/nicht", "kind", "kleinkind"];
   const suggestions = (f.first.length >= 2 && f.last.length >= 2) ? persons.filter((p) => p.id !== anchor.id && rel.nameMatch(f.first, f.last, p.first, p.last)) : [];
@@ -1114,7 +1186,7 @@ function AddPanel({ anchor, persons, onClose, onSubmit }) {
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {kinds.map((k) => <button key={k} onClick={() => setF((s) => ({ ...s, kind: k }))} style={{ padding: "7px 13px", borderRadius: 999, border: `1px solid ${f.kind === k ? T.green : T.border}`, background: f.kind === k ? T.green : T.surfaceUp, color: f.kind === k ? "#06140F" : T.text, fontSize: 13, fontWeight: 500, cursor: "pointer", textTransform: "capitalize" }}>{t("kind_" + k)}</button>)}
       </div>
-      <PersonFields f={f} set={set} />
+      <PersonFields f={f} set={set} setF={setF} />
       {suggestions.length > 0 && (
         <div style={{ background: "rgba(232,178,76,0.10)", border: `1px solid ${T.gold}`, borderRadius: 12, padding: 12, marginTop: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, fontWeight: 600, color: T.gold, marginBottom: 8 }}><Sparkles size={15} /> {t("maybeExists")}</div>
@@ -1133,12 +1205,12 @@ function AddPanel({ anchor, persons, onClose, onSubmit }) {
 }
 
 function FreeAddPanel({ onClose, onSubmit }) {
-  const [f, setF] = useState({ first: "", last: "", birth: "", city: "", birthCity: "", email: "", insta: "", fb: "", gender: "" });
+  const [f, setF] = useState({ first: "", last: "", birth: "", city: "", birthCity: "", email: "", insta: "", fb: "", linkedin: "", gender: "" });
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   return (
     <Modal title={t("newPerson")} onClose={onClose}>
       <p style={{ fontSize: 13, color: T.textSoft, marginTop: 0, lineHeight: 1.5 }}>{t("freeDesc")}</p>
-      <PersonFields f={f} set={set} />
+      <PersonFields f={f} set={set} setF={setF} />
       <button onClick={() => f.first && f.last && onSubmit(f)} disabled={!f.first || !f.last} style={{ ...pill(T.green, "#06140F"), width: "100%", justifyContent: "center", marginTop: 16, opacity: (!f.first || !f.last) ? 0.4 : 1 }}><Plus size={16} /> {t("placeOnField")}</button>
     </Modal>
   );
