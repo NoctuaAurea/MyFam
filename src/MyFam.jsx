@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   Plus, X, Search, Share2, QrCode, MapPin, Calendar, Mail, Phone,
   Instagram, MessageCircle, Crosshair, ZoomIn, ZoomOut, UserPlus,
-  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid,
+  Sparkles, Link2, Users, Check, Smartphone, Baby, Facebook, Move, Globe, LayoutGrid, Pencil, Trash2, Heart, ArrowUp, ArrowDown,
 } from "lucide-react";
 import * as THREE from "three";
 import WORLD_BORDERS from "./worldBorders.js";
@@ -151,6 +151,7 @@ export default function MyFam() {
   const [selectedId, setSelectedId] = useState(() => boot?.meId ?? 1);
   const [selectedIds, setSelectedIds] = useState(() => new Set()); // multi-select (marquee / shift-click)
   const [marquee, setMarquee] = useState(null); // rubber-band rect in container space {x,y,w,h}
+  const [selectedEdge, setSelectedEdge] = useState(null); // {x, y, type:'partner'|'parentXY'|'parentYX'} for the edge editor
   const [panel, setPanel] = useState(null);       // 'add' | 'addFree' | 'connect' | 'share'
   const [toast, setToast] = useState(null);
   const [highlight, setHighlight] = useState(new Set());
@@ -275,6 +276,26 @@ export default function MyFam() {
     centerOn(0, 0, viewRef.current.k);
   };
 
+  /* ---------- edge editing: retype / remove a connection ---------- *
+   * An edge is identified by its two endpoints (x, y) + a type:
+   *   'partner'  → spouse {a:x, b:y}
+   *   'parentXY' → x is the parent of y  → parentOf {p:x, c:y}
+   *   'parentYX' → y is the parent of x  → parentOf {p:y, c:x}        */
+  const dropEdge = (x, y) => { // remove every edge between x and y (either direction / kind)
+    setSpouse((es) => es.filter((e) => !((e.a === x && e.b === y) || (e.a === y && e.b === x))));
+    setParentOf((es) => es.filter((e) => !((e.p === x && e.c === y) || (e.p === y && e.c === x))));
+  };
+  const retypeEdge = (newType) => {
+    if (!selectedEdge) return;
+    const { x, y } = selectedEdge;
+    dropEdge(x, y);
+    if (newType === "partner") setSpouse((es) => [...es, { a: x, b: y }]);
+    else if (newType === "parentXY") setParentOf((es) => [...es, { p: x, c: y }]);
+    else setParentOf((es) => [...es, { p: y, c: x }]);
+    setSelectedEdge((s) => (s ? { ...s, type: newType } : s));
+  };
+  const removeEdge = () => { if (!selectedEdge) return; dropEdge(selectedEdge.x, selectedEdge.y); setSelectedEdge(null); };
+
   /* ---------- relatie-helpers ---------- */
   /* relationship engine — pure logic lives in ./relationships.js; these thin wrappers
      bind the current edge-list state (and t() for localized labels). */
@@ -337,6 +358,7 @@ export default function MyFam() {
   /* ---------- pointer: pan + node-drag + klik-op-veld ---------- */
   const startNodeDrag = (id, e) => {
     e.stopPropagation();
+    setSelectedEdge(null);
     const ps = personsRef.current; const w = screenToWorld(e.clientX, e.clientY);
     // if grabbing a node that's part of a multi-selection, drag the whole group
     const group = selectedIds.has(id) && selectedIds.size > 1 ? [...selectedIds] : [id];
@@ -353,6 +375,7 @@ export default function MyFam() {
   };
   const onPointerDown = (e) => {
     if (mode !== "2d") return;
+    setSelectedEdge(null); // any canvas interaction dismisses the edge editor
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) { // second finger → begin pinch; cancel pan/node-drag
       const [a, b] = [...pointers.current.values()]; const r = containerRef.current.getBoundingClientRect();
@@ -494,6 +517,11 @@ export default function MyFam() {
     sorted.forEach(c => { d += ` M${c.cx},${midY} L${c.cx},${c.cy}`; });
     connectors.push({ key: `f${key}`, d, hot });
   });
+  // editable-edge handles: one per logical connection, placed at its midpoint
+  const edges = [];
+  spouse.forEach((e) => { const a = byId(e.a), b = byId(e.b); if (a && b) edges.push({ key: `e-p-${e.a}-${e.b}`, x: e.a, y: e.b, type: "partner", mx: (a.cx + b.cx) / 2, my: (a.cy + b.cy) / 2 }); });
+  parentOf.forEach((e) => { const p = byId(e.p), c = byId(e.c); if (p && c) edges.push({ key: `e-o-${e.p}-${e.c}`, x: e.p, y: e.c, type: "parentXY", mx: (p.cx + c.cx) / 2, my: (p.cy + c.cy) / 2 }); });
+
   const prevFrom = dragPreview && byId(dragPreview.fromId), prevTo = dragPreview && byId(dragPreview.toId);
 
   const viewFallback = (_err, reset) => (
@@ -507,7 +535,7 @@ export default function MyFam() {
   );
 
   return (
-    <div dir={isRTL() ? "rtl" : "ltr"} style={{ fontFamily: sans, color: T.text, height: "100vh", minHeight: 560, display: "flex", flexDirection: "column", background: T.groundDeep }}>
+    <div dir={isRTL() ? "rtl" : "ltr"} style={{ fontFamily: sans, color: T.text, height: "100vh", minHeight: 560, display: "flex", flexDirection: "column", background: T.groundDeep, userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
       <style>{CSS}</style>
 
       {/* ---------- topbar ---------- */}
@@ -558,7 +586,7 @@ export default function MyFam() {
 
       {/* ---------- canvas ---------- */}
       <div ref={containerRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onWheel={onWheel}
-        style={{ position: "relative", flex: 1, overflow: "hidden", cursor: nodeDrag.current.active ? "grabbing" : "grab", background: `radial-gradient(130% 130% at 50% 30%, #1A1E1C 0%, #111413 100%)`, touchAction: "none" }}>
+        style={{ position: "relative", flex: 1, overflow: "hidden", cursor: nodeDrag.current.active ? "grabbing" : "crosshair", background: `radial-gradient(130% 130% at 50% 30%, #1A1E1C 0%, #111413 100%)`, touchAction: "none" }}>
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(rgba(234,242,237,0.07) 1px, transparent 1px)`, backgroundSize: `${22 * view.k}px ${22 * view.k}px`, backgroundPosition: `${view.x}px ${view.y}px` }} />
         <div style={{ position: "absolute", inset: 0, opacity: 0.5, pointerEvents: "none", backgroundImage: `radial-gradient(circle at 22% 18%, rgba(63,185,133,0.07), transparent 42%), radial-gradient(circle at 82% 72%, rgba(232,178,76,0.06), transparent 46%)` }} />
 
@@ -590,11 +618,54 @@ export default function MyFam() {
               {dragPreview.relation === "ouder" ? t("dragParentOf", { name: prevTo.first }) : dragPreview.relation === "kind" ? t("dragChildOf", { name: prevTo.first }) : t("dragPartnerOf", { name: prevTo.first })}
             </div>
           )}
+
+          {/* edit-connection handles at each edge midpoint (counter-scaled to stay a constant size) */}
+          {!nodeDrag.current.active && !dragPreview && edges.map((ed) => {
+            const active = selectedEdge && ((selectedEdge.x === ed.x && selectedEdge.y === ed.y) || (selectedEdge.x === ed.y && selectedEdge.y === ed.x));
+            return (
+              <button key={ed.key} title={t("connEdit")}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setSelectedEdge({ x: ed.x, y: ed.y, type: ed.type, mx: ed.mx, my: ed.my }); }}
+                style={{ position: "absolute", left: ed.mx, top: ed.my, transform: `translate(-50%,-50%) scale(${1 / view.k})`, width: 26, height: 26, borderRadius: "50%", display: "grid", placeItems: "center", cursor: "pointer", border: `1px solid ${active ? T.gold : T.border}`, background: active ? T.gold : "rgba(21,36,31,0.92)", color: active ? "#06140F" : T.textSoft, boxShadow: "0 2px 8px rgba(0,0,0,0.45)", opacity: active ? 1 : 0.55, transition: "opacity .15s", zIndex: 4 }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.opacity = 1; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.opacity = 0.55; }}>
+                <Pencil size={13} />
+              </button>
+            );
+          })}
         </div>
 
         {marquee && marquee.w > 2 && marquee.h > 2 && (
           <div style={{ position: "absolute", left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h, border: `1px solid ${T.green}`, background: "rgba(63,185,133,0.12)", borderRadius: 4, pointerEvents: "none", zIndex: 20 }} />
         )}
+
+        {/* edge editor — change connection type or remove it (→ floating person) */}
+        {selectedEdge && (() => {
+          const A = byId(selectedEdge.x), B = byId(selectedEdge.y); if (!A || !B) return null;
+          const sx = view.x + selectedEdge.mx * view.k, sy = view.y + selectedEdge.my * view.k;
+          const opt = (type, icon, label) => (
+            <button onClick={() => retypeEdge(type)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontFamily: sans, border: `1px solid ${selectedEdge.type === type ? T.gold : T.border}`, background: selectedEdge.type === type ? "rgba(232,178,76,0.16)" : "transparent", color: T.text }}>
+              <span style={{ display: "grid", placeItems: "center", color: selectedEdge.type === type ? T.gold : T.textSoft }}>{icon}</span>{label}
+            </button>
+          );
+          return (
+            <div style={{ position: "absolute", left: Math.max(12, Math.min(sx, (containerRef.current?.clientWidth || 9999) - 232)), top: Math.max(12, sy - 12), transform: "translate(-50%,-100%)", zIndex: 40, width: 220, background: "rgba(16,28,24,0.97)", border: `1px solid ${T.border}`, borderRadius: 14, padding: 12, boxShadow: "0 14px 36px rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
+                <span style={{ fontFamily: serif, fontSize: 13.5, fontWeight: 600, color: T.text }}>{t("connEdit")}</span>
+                <button onClick={() => setSelectedEdge(null)} style={{ border: "none", background: "transparent", color: T.textSoft, cursor: "pointer", display: "grid", placeItems: "center", padding: 2 }}><X size={15} /></button>
+              </div>
+              <div style={{ fontSize: 11.5, color: T.textSoft, fontFamily: mono, marginBottom: 9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{A.first} — {B.first}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {opt("partner", <Heart size={14} />, t("connPartner"))}
+                {opt("parentXY", <ArrowDown size={14} />, t("connParentOf", { a: A.first, b: B.first }))}
+                {opt("parentYX", <ArrowUp size={14} />, t("connChildOf", { a: A.first, b: B.first }))}
+              </div>
+              <button onClick={removeEdge} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", marginTop: 9, padding: "8px 10px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: sans, border: "1px solid rgba(214,98,98,0.4)", background: "rgba(214,98,98,0.12)", color: "#E89090" }}>
+                <Trash2 size={14} /> {t("connRemove")}
+              </button>
+            </div>
+          );
+        })()}
 
         {/* hint */}
         {revealed && !panel && !selected && (
