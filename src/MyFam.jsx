@@ -458,10 +458,42 @@ export default function MyFam() {
     return map;
   }, [persons, parentOf, spouse, sibling, meId, lang]);
 
-  /* ---------- render-data ---------- */
-  const lines = [];
-  parentOf.forEach((e, i) => { const a = byId(e.p), b = byId(e.c); if (a && b) lines.push({ key: `p${i}`, d: edgePath(a, b, true), hot: highlight.has(e.p) && highlight.has(e.c) }); });
-  spouse.forEach((e, i) => { const a = byId(e.a), b = byId(e.b); if (a && b) lines.push({ key: `s${i}`, d: edgePath(a, b, false), hot: highlight.has(e.a) && highlight.has(e.b), dash: true }); });
+  /* ---------- render-data: orthogonal family-tree connectors ---------- */
+  const connectors = [];
+
+  // Horizontal bar between spouses
+  spouse.forEach((e, i) => {
+    const a = byId(e.a), b = byId(e.b); if (!a || !b) return;
+    const x1 = Math.min(a.cx, b.cx), x2 = Math.max(a.cx, b.cx), y = (a.cy + b.cy) / 2;
+    connectors.push({ key: `s${i}`, d: `M${x1},${y} L${x2},${y}`, hot: highlight.has(e.a) && highlight.has(e.b) });
+  });
+
+  // Orthogonal T-bar connectors: group children by their parent-set
+  const childToParents = new Map();
+  parentOf.forEach(e => { if (!childToParents.has(e.c)) childToParents.set(e.c, []); childToParents.get(e.c).push(e.p); });
+  const familyMap = new Map();
+  childToParents.forEach((pids, cid) => {
+    const key = [...pids].sort((a, b) => a - b).join(',');
+    if (!familyMap.has(key)) familyMap.set(key, { pids: [...pids].sort((a, b) => a - b), cids: [] });
+    familyMap.get(key).cids.push(cid);
+  });
+  familyMap.forEach(({ pids, cids }, key) => {
+    const pnodes = pids.map(byId).filter(Boolean), cnodes = cids.map(byId).filter(Boolean);
+    if (!pnodes.length || !cnodes.length) return;
+    const hot = pids.some(id => highlight.has(id)) && cids.some(id => highlight.has(id));
+    const parentY = pnodes[0].cy;
+    const avgChildY = cnodes.reduce((s, c) => s + c.cy, 0) / cnodes.length;
+    const midY = Math.round((parentY + avgChildY) / 2);
+    const coupleX = Math.round(pnodes.reduce((s, p) => s + p.cx, 0) / pnodes.length);
+    const sorted = [...cnodes].sort((a, b) => a.cx - b.cx);
+    const lx = sorted[0].cx, rx = sorted[sorted.length - 1].cx;
+    // Drop from couple centre → midY, then horizontal bar → stubs down to each child
+    let d = `M${coupleX},${parentY} L${coupleX},${midY}`;
+    if (lx !== rx) d += ` M${lx},${midY} L${rx},${midY}`;
+    else if (Math.abs(coupleX - lx) > 2) d += ` M${coupleX},${midY} L${lx},${midY}`;
+    sorted.forEach(c => { d += ` M${c.cx},${midY} L${c.cx},${c.cy}`; });
+    connectors.push({ key: `f${key}`, d, hot });
+  });
   const prevFrom = dragPreview && byId(dragPreview.fromId), prevTo = dragPreview && byId(dragPreview.toId);
 
   const viewFallback = (_err, reset) => (
@@ -534,11 +566,11 @@ export default function MyFam() {
         <div style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
           <svg width={SVG_OFF * 2} height={SVG_OFF * 2} style={{ position: "absolute", left: -SVG_OFF, top: -SVG_OFF, overflow: "visible", pointerEvents: "none" }}>
             <g transform={`translate(${SVG_OFF},${SVG_OFF})`}>
-              {lines.map((l, i) => (
-                <path key={l.key} d={l.d} fill="none" pathLength="100"
-                  stroke={l.hot ? T.gold : T.line} strokeWidth={l.hot ? 3 : 1.7}
-                  strokeDasharray={l.dash && !l.hot ? "4 5" : undefined}
-                  style={!revealed ? { strokeDasharray: 100, strokeDashoffset: 100, animation: `vw-draw .9s ease forwards ${(0.35 + i * 0.045).toFixed(2)}s` } : undefined} />
+              {connectors.map((l, i) => (
+                <path key={l.key} d={l.d} fill="none"
+                  stroke={l.hot ? T.gold : T.line} strokeWidth={l.hot ? 2.5 : 1.5}
+                  strokeLinecap="round"
+                  style={!revealed ? { opacity: 0, animation: `vw-fade .5s ease forwards ${(0.3 + i * 0.07).toFixed(2)}s` } : undefined} />
               ))}
               {dragPreview && prevFrom && prevTo && (
                 <path d={edgePath(prevFrom, prevTo, dragPreview.relation !== "partner")} fill="none" stroke={T.gold} strokeWidth={2.6} strokeDasharray="7 6" opacity={0.95} />
