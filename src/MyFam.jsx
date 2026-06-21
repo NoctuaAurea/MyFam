@@ -221,6 +221,30 @@ export default function MyFam() {
     return () => { document.head.removeChild(l); clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
+  /* Capture-phase pointerdown on the canvas container — fires before any child
+     stopPropagation (nodes, edge handles) so every pointer is always registered
+     in pointers.current, which is required for two-finger pinch-zoom to start. */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const capture = (e) => {
+      if (mode !== "2d") return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current.size === 2) {
+        const [a, b] = [...pointers.current.values()];
+        const r = el.getBoundingClientRect();
+        pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top } };
+        panDrag.current = { active: false };
+        nodeDrag.current = { active: false };
+        marqueeRef.current = { active: false };
+        setMarquee(null);
+        setDragPreview(null);
+      }
+    };
+    el.addEventListener("pointerdown", capture, { capture: true });
+    return () => el.removeEventListener("pointerdown", capture, { capture: true });
+  }, [mode]);
+
   /* Block *browser* page-zoom (pinch / ⌘/Ctrl+wheel / ⌘± ) everywhere so the top
      menu can never be scaled out of view — only our canvas zoom should ever fire. */
   useEffect(() => {
